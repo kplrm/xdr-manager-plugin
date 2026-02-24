@@ -1,10 +1,16 @@
 export type AgentStatus = 'healthy' | 'degraded' | 'offline';
 export type XdrAction = 'restart' | 'isolate' | 'upgrade';
+export type PolicyLogLevel = 'minimal' | 'standard' | 'verbose';
 
 export interface XdrPolicy {
   id: string;
   name: string;
   description: string;
+  malwareProtection: boolean;
+  fileIntegrityMonitoring: boolean;
+  autoUpgrade: boolean;
+  osqueryEnabled: boolean;
+  logLevel: PolicyLogLevel;
 }
 
 export interface XdrAgent {
@@ -39,4 +45,22 @@ export interface RunActionRequest {
 export interface RunActionResponse {
   agent: XdrAgent;
   message: string;
+}
+
+export interface ListPoliciesResponse {
+  policies: XdrPolicy[];
+}
+
+export interface UpsertPolicyRequest {
+  name: string;
+  description: string;
+  malwareProtection: boolean;
+  fileIntegrityMonitoring: boolean;
+  autoUpgrade: boolean;
+  osqueryEnabled: boolean;
+  logLevel: PolicyLogLevel;
+}
+
+export interface UpsertPolicyResponse {
+  policy: XdrPolicy;
 }
