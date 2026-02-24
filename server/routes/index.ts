@@ -5,6 +5,8 @@ import {
   ListAgentsResponse,
   RunActionRequest,
   RunActionResponse,
+  UpsertPolicyRequest,
+  UpsertPolicyResponse,
   XdrAction,
   XdrAgent,
   XdrPolicy,
@@ -15,11 +17,21 @@ const policies: XdrPolicy[] = [
     id: 'default-endpoint',
     name: 'Default Endpoint Policy',
     description: 'Baseline telemetry and malware prevention.',
+    malwareProtection: true,
+    fileIntegrityMonitoring: true,
+    autoUpgrade: false,
+    osqueryEnabled: false,
+    logLevel: 'standard',
   },
   {
     id: 'high-security-linux',
     name: 'High Security Linux',
     description: 'Hardening profile for production Linux workloads.',
+    malwareProtection: true,
+    fileIntegrityMonitoring: true,
+    autoUpgrade: true,
+    osqueryEnabled: true,
+    logLevel: 'verbose',
   },
 ];
 
@@ -59,6 +71,30 @@ const bumpVersion = (version: string): string => {
   parts[2] += 1;
   return parts.join('.');
 };
+
+const toPolicyId = (value: string): string => {
+  const normalized = value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+
+  return normalized || `policy-${Date.now()}`;
+};
+
+const policyRequestSchema = schema.object({
+  name: schema.string({ minLength: 1 }),
+  description: schema.string({ minLength: 1 }),
+  malwareProtection: schema.boolean(),
+  fileIntegrityMonitoring: schema.boolean(),
+  autoUpgrade: schema.boolean(),
+  osqueryEnabled: schema.boolean(),
+  logLevel: schema.oneOf([
+    schema.literal('minimal'),
+    schema.literal('standard'),
+    schema.literal('verbose'),
+  ]),
+});
 
 export function defineRoutes(router: IRouter) {
   router.get(
@@ -111,6 +147,121 @@ export function defineRoutes(router: IRouter) {
       return response.ok({
         body: {
           agent: newAgent,
+        },
+      });
+    }
+  );
+
+  router.get(
+    {
+      path: '/api/xdr_manager/policies',
+      validate: false,
+    },
+    async (_context, _request, response) => {
+      return response.ok({
+        body: {
+          policies,
+        },
+      });
+    }
+  );
+
+  router.post(
+    {
+      path: '/api/xdr_manager/policies',
+      validate: {
+        body: policyRequestSchema,
+      },
+    },
+    async (_context, request, response) => {
+      const payload = request.body as UpsertPolicyRequest;
+      const baseId = toPolicyId(payload.name);
+      let id = baseId;
+      let count = 1;
+      while (policies.some((policy) => policy.id === id)) {
+        count += 1;
+        id = `${baseId}-${count}`;
+      }
+
+      const newPolicy: XdrPolicy = {
+        id,
+        ...payload,
+      };
+      policies.unshift(newPolicy);
+
+      const body: UpsertPolicyResponse = {
+        policy: newPolicy,
+      };
+
+      return response.ok({ body });
+    }
+  );
+
+  router.put(
+    {
+      path: '/api/xdr_manager/policies/{id}',
+      validate: {
+        params: schema.object({
+          id: schema.string({ minLength: 1 }),
+        }),
+        body: policyRequestSchema,
+      },
+    },
+    async (_context, request, response) => {
+      const policy = policies.find((item) => item.id === request.params.id);
+
+      if (!policy) {
+        return response.notFound({
+          body: `Policy [${request.params.id}] not found`,
+        });
+      }
+
+      const payload = request.body as UpsertPolicyRequest;
+      policy.name = payload.name;
+      policy.description = payload.description;
+      policy.malwareProtection = payload.malwareProtection;
+      policy.fileIntegrityMonitoring = payload.fileIntegrityMonitoring;
+      policy.autoUpgrade = payload.autoUpgrade;
+      policy.osqueryEnabled = payload.osqueryEnabled;
+      policy.logLevel = payload.logLevel;
+
+      const body: UpsertPolicyResponse = {
+        policy,
+      };
+
+      return response.ok({ body });
+    }
+  );
+
+  router.delete(
+    {
+      path: '/api/xdr_manager/policies/{id}',
+      validate: {
+        params: schema.object({
+          id: schema.string({ minLength: 1 }),
+        }),
+      },
+    },
+    async (_context, request, response) => {
+      const policyIndex = policies.findIndex((item) => item.id === request.params.id);
+
+      if (policyIndex === -1) {
+        return response.notFound({
+          body: `Policy [${request.params.id}] not found`,
+        });
+      }
+
+      if (agents.some((agent) => agent.policyId === request.params.id)) {
+        return response.badRequest({
+          body: `Policy [${request.params.id}] is currently assigned to one or more agents.`,
+        });
+      }
+
+      const [deletedPolicy] = policies.splice(policyIndex, 1);
+
+      return response.ok({
+        body: {
+          deletedPolicyId: deletedPolicy.id,
         },
       });
     }
