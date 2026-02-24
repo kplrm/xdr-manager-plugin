@@ -1,0 +1,20 @@
+{
+  // extend OpenSearch Dashboards's tsconfig, or use your own settings
+  "extends": "../../tsconfig.json",
+
+  // tell the TypeScript compiler where to find your source files
+  "include": [
+    "index.ts",
+    "common/**/*.ts",
+    "public/**/*.ts",
+    "public/**/*.tsx",
+    "server/**/*.ts",
+    "../../typings/**/*"
+  ],
+  "exclude": ["node_modules", "*/node_modules/"],
+  "compilerOptions": {
+    "outDir": "./target",
+    "skipLibCheck": true,
+    "esModuleInterop": true
+  },
+}

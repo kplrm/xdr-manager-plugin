@@ -1,0 +1,9 @@
+{
+  "id": "xdrManager",
+  "version": "0.1.0",
+  "opensearchDashboardsVersion": "opensearchDashboards",
+  "server": true,
+  "ui": true,
+  "requiredPlugins": [],
+  "optionalPlugins": []
+}
