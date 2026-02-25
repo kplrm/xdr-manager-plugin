@@ -1,4 +1,4 @@
-export type AgentStatus = 'healthy' | 'degraded' | 'offline';
+export type AgentStatus = 'healthy' | 'degraded' | 'offline' | 'unseen';
 export type XdrAction = 'restart' | 'isolate' | 'upgrade';
 export type PolicyLogLevel = 'minimal' | 'standard' | 'verbose';
 
@@ -36,6 +36,33 @@ export interface EnrollAgentRequest {
 
 export interface EnrollAgentResponse {
   agent: XdrAgent;
+}
+
+export interface GenerateEnrollmentTokenRequest {
+  policyId: string;
+}
+
+export interface GenerateEnrollmentTokenResponse {
+  token: string;
+  policyId: string;
+  createdAt: string;
+}
+
+export interface ControlPlaneEnrollRequest {
+  agent_id: string;
+  machine_id: string;
+  hostname: string;
+  architecture: string;
+  os_type: string;
+  ip_addresses: string[];
+  policy_id: string;
+  tags: string[];
+  agent_version: string;
+}
+
+export interface ControlPlaneEnrollResponse {
+  enrollment_id: string;
+  message: string;
 }
 
 export interface RunActionRequest {
