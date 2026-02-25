@@ -5,6 +5,7 @@ import {
   AgentStatus,
   ControlPlaneEnrollRequest,
   ControlPlaneEnrollResponse,
+  EnrollmentTokenStatusResponse,
   GenerateEnrollmentTokenResponse,
   ListAgentsResponse,
   RunActionRequest,
@@ -64,6 +65,9 @@ type EnrollmentTokenRecord = {
   token: string;
   policyId: string;
   createdAt: string;
+  consumedAt?: string;
+  consumedAgentId?: string;
+  consumedHostname?: string;
 };
 
 const enrollmentTokens: EnrollmentTokenRecord[] = [];
@@ -72,6 +76,25 @@ const actionToStatusMap: Record<XdrAction, AgentStatus> = {
   restart: 'healthy',
   isolate: 'offline',
   upgrade: 'healthy',
+};
+
+const STALE_AGENT_THRESHOLD_MS = 5 * 60 * 1000;
+
+const isUnknownUnseenPlaceholder = (agent: XdrAgent): boolean => {
+  return agent.status === 'unseen' && (agent.name === 'unknown' || agent.name === 'localhost');
+};
+
+const deriveAgentStatus = (agent: XdrAgent, nowMs: number): AgentStatus => {
+  if (agent.status === 'unseen') {
+    return 'unseen';
+  }
+
+  const lastSeenMs = Date.parse(agent.lastSeen);
+  if (Number.isFinite(lastSeenMs) && nowMs - lastSeenMs >= STALE_AGENT_THRESHOLD_MS) {
+    return 'offline';
+  }
+
+  return agent.status;
 };
 
 const bumpVersion = (version: string): string => {
@@ -163,6 +186,37 @@ export function defineRoutes(router: IRouter) {
     }
   );
 
+  router.get(
+    {
+      path: '/api/xdr_manager/enrollment_tokens/{token}/status',
+      validate: {
+        params: schema.object({
+          token: schema.string({ minLength: 1 }),
+        }),
+      },
+    },
+    async (_context, request, response) => {
+      const tokenRecord = enrollmentTokens.find((item) => item.token === request.params.token);
+      if (!tokenRecord) {
+        return response.notFound({
+          body: `Enrollment token [${request.params.token}] not found`,
+        });
+      }
+
+      const body: EnrollmentTokenStatusResponse = {
+        token: tokenRecord.token,
+        policyId: tokenRecord.policyId,
+        status: tokenRecord.consumedAt ? 'consumed' : 'pending',
+        createdAt: tokenRecord.createdAt,
+        consumedAt: tokenRecord.consumedAt,
+        consumedAgentId: tokenRecord.consumedAgentId,
+        consumedHostname: tokenRecord.consumedHostname,
+      };
+
+      return response.ok({ body });
+    }
+  );
+
   router.post(
     {
       path: '/api/v1/agents/enroll',
@@ -202,6 +256,14 @@ export function defineRoutes(router: IRouter) {
         });
       }
 
+      if (tokenRecord.consumedAt) {
+        return response.unauthorized({
+          body: {
+            message: 'Enrollment token already used',
+          },
+        });
+      }
+
       const payload = request.body as ControlPlaneEnrollRequest;
       if (tokenRecord.policyId !== payload.policy_id) {
         return response.badRequest({
@@ -231,22 +293,40 @@ export function defineRoutes(router: IRouter) {
         existingAgent.tags = payload.tags;
         existingAgent.version = payload.agent_version;
       } else {
-        const newAgent: XdrAgent = {
-          id: payload.agent_id,
-          name: payload.hostname,
-          policyId: payload.policy_id,
-          status: 'healthy',
-          lastSeen: now,
-          tags: payload.tags,
-          version: payload.agent_version,
-        };
-        agents.unshift(newAgent);
+        const placeholder = agents.find(
+          (item) => isUnknownUnseenPlaceholder(item) && item.policyId === payload.policy_id
+        );
+
+        if (placeholder) {
+          placeholder.id = payload.agent_id;
+          placeholder.name = payload.hostname;
+          placeholder.policyId = payload.policy_id;
+          placeholder.status = 'healthy';
+          placeholder.lastSeen = now;
+          placeholder.tags = payload.tags;
+          placeholder.version = payload.agent_version;
+        } else {
+          const newAgent: XdrAgent = {
+            id: payload.agent_id,
+            name: payload.hostname,
+            policyId: payload.policy_id,
+            status: 'healthy',
+            lastSeen: now,
+            tags: payload.tags,
+            version: payload.agent_version,
+          };
+          agents.unshift(newAgent);
+        }
       }
 
       const body: ControlPlaneEnrollResponse = {
         enrollment_id: payload.agent_id,
         message: `enrolled agent ${payload.hostname}`,
       };
+
+      tokenRecord.consumedAt = now;
+      tokenRecord.consumedAgentId = payload.agent_id;
+      tokenRecord.consumedHostname = payload.hostname;
 
       return response.ok({ body });
     }
@@ -258,8 +338,13 @@ export function defineRoutes(router: IRouter) {
       validate: false,
     },
     async (_context, _request, response) => {
+      const nowMs = Date.now();
       const body: ListAgentsResponse = {
-        agents,
+        agents: agents.map((agent) => ({
+          ...agent,
+          name: agent.status === 'unseen' ? 'unknown' : agent.name,
+          status: deriveAgentStatus(agent, nowMs),
+        })),
         policies,
       };
 
@@ -272,7 +357,7 @@ export function defineRoutes(router: IRouter) {
       path: '/api/xdr_manager/agents/enroll',
       validate: {
         body: schema.object({
-          name: schema.string({ minLength: 1 }),
+          hostname: schema.string({ minLength: 1 }),
           policyId: schema.string({ minLength: 1 }),
           tags: schema.maybe(schema.arrayOf(schema.string())),
         }),
@@ -289,7 +374,7 @@ export function defineRoutes(router: IRouter) {
 
       const newAgent: XdrAgent = {
         id: `agent-${Date.now()}`,
-        name: request.body.name,
+        name: 'unknown',
         policyId: request.body.policyId,
         status: 'unseen',
         lastSeen: new Date().toISOString(),
