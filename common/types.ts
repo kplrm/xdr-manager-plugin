@@ -29,7 +29,7 @@ export interface ListAgentsResponse {
 }
 
 export interface EnrollAgentRequest {
-  name: string;
+  hostname: string;
   policyId: string;
   tags?: string[];
 }
@@ -46,6 +46,16 @@ export interface GenerateEnrollmentTokenResponse {
   token: string;
   policyId: string;
   createdAt: string;
+}
+
+export interface EnrollmentTokenStatusResponse {
+  token: string;
+  policyId: string;
+  status: 'pending' | 'consumed';
+  createdAt: string;
+  consumedAt?: string;
+  consumedAgentId?: string;
+  consumedHostname?: string;
 }
 
 export interface ControlPlaneEnrollRequest {

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  EuiLoadingSpinner,
   EuiBadge,
   EuiButton,
   EuiButtonEmpty,
@@ -34,6 +35,7 @@ import { i18n } from '@osd/i18n';
 import { BrowserRouter as Router } from 'react-router-dom';
 import { CoreStart } from '../../../../src/core/public';
 import {
+  EnrollmentTokenStatusResponse,
   GenerateEnrollmentTokenResponse,
   ListAgentsResponse,
   PolicyLogLevel,
@@ -57,19 +59,63 @@ const statusColorMap: Record<string, 'success' | 'warning' | 'danger' | 'hollow'
   unseen: 'hollow',
 };
 
+const formatLastSeenAgo = (lastSeen: string, nowMs: number): string => {
+  const lastSeenMs = Date.parse(lastSeen);
+  if (!Number.isFinite(lastSeenMs)) {
+    return i18n.translate('xdrManager.lastSeen.unknown', {
+      defaultMessage: 'unknown',
+    });
+  }
+
+  const diffSeconds = Math.max(0, Math.floor((nowMs - lastSeenMs) / 1000));
+
+  if (diffSeconds < 60) {
+    return i18n.translate('xdrManager.lastSeen.secondsAgo', {
+      defaultMessage: '{count} sec ago',
+      values: { count: diffSeconds },
+    });
+  }
+
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) {
+    return i18n.translate('xdrManager.lastSeen.minutesAgo', {
+      defaultMessage: '{count} min ago',
+      values: { count: diffMinutes },
+    });
+  }
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return i18n.translate('xdrManager.lastSeen.hoursAgo', {
+      defaultMessage: '{count} hr ago',
+      values: { count: diffHours },
+    });
+  }
+
+  const diffDays = Math.floor(diffHours / 24);
+  const dayUnit = diffDays === 1 ? 'day' : 'days';
+  return i18n.translate('xdrManager.lastSeen.daysAgo', {
+    defaultMessage: '{count} {unit} ago',
+    values: { count: diffDays, unit: dayUnit },
+  });
+};
+
 export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDeps) => {
   const [agents, setAgents] = useState<XdrAgent[]>([]);
   const [policies, setPolicies] = useState<XdrPolicy[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const [isEnrollFlyoutOpen, setIsEnrollFlyoutOpen] = useState(false);
-  const [agentName, setAgentName] = useState('');
   const [policyId, setPolicyId] = useState('');
   const [tagsText, setTagsText] = useState('linux,production');
-  const [isSubmittingEnroll, setIsSubmittingEnroll] = useState(false);
   const [enrollmentToken, setEnrollmentToken] = useState('');
   const [tokenPolicyId, setTokenPolicyId] = useState('');
+  const [tokenConsumedHostname, setTokenConsumedHostname] = useState('');
+  const [tokenValidationStatus, setTokenValidationStatus] = useState<'idle' | 'waiting' | 'consumed'>(
+    'idle'
+  );
   const [isGeneratingEnrollmentToken, setIsGeneratingEnrollmentToken] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   const [isPolicyFlyoutOpen, setIsPolicyFlyoutOpen] = useState(false);
   const [editingPolicyId, setEditingPolicyId] = useState<string | null>(null);
@@ -120,6 +166,14 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
   const runAction = useCallback(
     async (agentId: string, action: XdrAction) => {
       try {
@@ -142,50 +196,6 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
     [http, notifications.toasts]
   );
 
-  const enrollAgent = useCallback(async () => {
-    if (!agentName.trim()) {
-      notifications.toasts.addWarning(
-        i18n.translate('xdrManager.agentNameRequired', {
-          defaultMessage: 'Agent name is required.',
-        })
-      );
-      return;
-    }
-
-    setIsSubmittingEnroll(true);
-    try {
-      const tags = tagsText
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter(Boolean);
-      await http.post('/api/xdr_manager/agents/enroll', {
-        body: JSON.stringify({
-          name: agentName.trim(),
-          policyId,
-          tags,
-        }),
-      });
-      notifications.toasts.addSuccess(
-        i18n.translate('xdrManager.enrollSuccess', {
-          defaultMessage: 'Agent enrolled successfully.',
-        })
-      );
-      setAgentName('');
-      setTagsText('linux,production');
-      setIsEnrollFlyoutOpen(false);
-      await loadData();
-    } catch (error) {
-      notifications.toasts.addDanger({
-        title: i18n.translate('xdrManager.enrollError', {
-          defaultMessage: 'Unable to enroll agent',
-        }),
-        text: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      setIsSubmittingEnroll(false);
-    }
-  }, [agentName, http, loadData, notifications.toasts, policyId, tagsText]);
-
   const generateEnrollmentToken = useCallback(async () => {
     if (!policyId) {
       notifications.toasts.addWarning(
@@ -204,6 +214,8 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
 
       setEnrollmentToken(response.token);
       setTokenPolicyId(response.policyId);
+      setTokenConsumedHostname('');
+      setTokenValidationStatus('waiting');
 
       notifications.toasts.addSuccess(
         i18n.translate('xdrManager.generateEnrollmentTokenSuccess', {
@@ -221,6 +233,46 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
       setIsGeneratingEnrollmentToken(false);
     }
   }, [http, notifications.toasts, policyId]);
+
+  const stopEnrollmentValidation = useCallback(() => {
+    setTokenValidationStatus('idle');
+    setEnrollmentToken('');
+    setTokenPolicyId('');
+    setTokenConsumedHostname('');
+  }, []);
+
+  useEffect(() => {
+    if (!isEnrollFlyoutOpen || !enrollmentToken || tokenValidationStatus !== 'waiting') {
+      return;
+    }
+
+    let isMounted = true;
+
+    const pollTokenStatus = async () => {
+      try {
+        const response = await http.get<EnrollmentTokenStatusResponse>(
+          `/api/xdr_manager/enrollment_tokens/${encodeURIComponent(enrollmentToken)}/status`
+        );
+
+        if (!isMounted || response.status !== 'consumed') {
+          return;
+        }
+
+        setTokenValidationStatus('consumed');
+        setTokenConsumedHostname(response.consumedHostname ?? 'unknown');
+        await loadData();
+      } catch {
+      }
+    };
+
+    pollTokenStatus();
+    const timer = window.setInterval(pollTokenStatus, 1500);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(timer);
+    };
+  }, [enrollmentToken, http, isEnrollFlyoutOpen, loadData, tokenValidationStatus]);
 
   const openCreatePolicyFlyout = useCallback(() => {
     setEditingPolicyId(null);
@@ -363,7 +415,8 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
     },
     {
       field: 'lastSeen',
-      name: i18n.translate('xdrManager.column.lastSeen', { defaultMessage: 'Last seen (UTC)' }),
+      name: i18n.translate('xdrManager.column.lastSeen', { defaultMessage: 'Last seen' }),
+      render: (lastSeen: string) => formatLastSeenAgo(lastSeen, nowMs),
     },
     {
       name: i18n.translate('xdrManager.column.tags', { defaultMessage: 'Tags' }),
@@ -693,18 +746,6 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
               <EuiFlyoutBody>
                 <EuiForm component="form">
                   <EuiFormRow
-                    label={i18n.translate('xdrManager.field.agentName', {
-                      defaultMessage: 'Agent name',
-                    })}
-                  >
-                    <EuiFieldText
-                      value={agentName}
-                      onChange={(event) => setAgentName(event.target.value)}
-                      placeholder="edge-node-01"
-                    />
-                  </EuiFormRow>
-
-                  <EuiFormRow
                     label={i18n.translate('xdrManager.field.policy', {
                       defaultMessage: 'Policy',
                     })}
@@ -759,20 +800,43 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                     <>
                       <EuiSpacer size="m" />
                       <EuiCallOut
-                        title={i18n.translate('xdrManager.tokenGeneratedTitle', {
-                          defaultMessage: 'Token generated',
-                        })}
-                        iconType="check"
-                        color="success"
+                        title={
+                          tokenValidationStatus === 'consumed'
+                            ? i18n.translate('xdrManager.tokenConsumedTitle', {
+                                defaultMessage: 'Agent enrolled',
+                              })
+                            : i18n.translate('xdrManager.tokenWaitingTitle', {
+                                defaultMessage: 'Waiting for enrollment',
+                              })
+                        }
+                        iconType={tokenValidationStatus === 'consumed' ? 'check' : 'clock'}
+                        color={tokenValidationStatus === 'consumed' ? 'success' : 'primary'}
                       >
                         <EuiText size="s" color="subdued">
                           <p>
-                            {i18n.translate('xdrManager.tokenGeneratedDetails', {
-                              defaultMessage:
-                                'Use this command to register xdr-agent with the generated token.',
-                            })}
+                            {tokenValidationStatus === 'consumed'
+                              ? i18n.translate('xdrManager.tokenConsumedDetails', {
+                                  defaultMessage: 'Enrollment completed for host {hostname}.',
+                                  values: { hostname: tokenConsumedHostname || 'unknown' },
+                                })
+                              : i18n.translate('xdrManager.tokenWaitingDetails', {
+                                  defaultMessage:
+                                    'Run xdr-agent enroll with this token. Validation updates automatically.',
+                                })}
                           </p>
                         </EuiText>
+                        {tokenValidationStatus === 'waiting' && (
+                          <>
+                            <EuiSpacer size="s" />
+                            <EuiLoadingSpinner size="m" />
+                            <EuiSpacer size="s" />
+                            <EuiButtonEmpty size="s" onClick={stopEnrollmentValidation}>
+                              {i18n.translate('xdrManager.stopEnrollmentValidation', {
+                                defaultMessage: 'Stop',
+                              })}
+                            </EuiButtonEmpty>
+                          </>
+                        )}
                         <EuiSpacer size="s" />
                         <EuiCodeBlock language="bash" isCopyable>
                           {`xdr-agent enroll ${enrollmentToken} --config config/config.json`}
@@ -787,9 +851,6 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                 <EuiButtonEmpty onClick={() => setIsEnrollFlyoutOpen(false)}>
                   {i18n.translate('xdrManager.cancelButton', { defaultMessage: 'Cancel' })}
                 </EuiButtonEmpty>
-                <EuiButton onClick={enrollAgent} fill isLoading={isSubmittingEnroll}>
-                  {i18n.translate('xdrManager.confirmEnrollButton', { defaultMessage: 'Enroll' })}
-                </EuiButton>
               </EuiFlyoutFooter>
             </EuiFlyout>
           )}
