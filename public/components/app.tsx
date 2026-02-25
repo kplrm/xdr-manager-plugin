@@ -4,6 +4,7 @@ import {
   EuiButton,
   EuiButtonEmpty,
   EuiCallOut,
+  EuiCodeBlock,
   EuiFieldSearch,
   EuiFieldText,
   EuiFlexGroup,
@@ -33,6 +34,7 @@ import { i18n } from '@osd/i18n';
 import { BrowserRouter as Router } from 'react-router-dom';
 import { CoreStart } from '../../../../src/core/public';
 import {
+  GenerateEnrollmentTokenResponse,
   ListAgentsResponse,
   PolicyLogLevel,
   RunActionResponse,
@@ -48,10 +50,11 @@ interface XdrManagerAppDeps {
   http: CoreStart['http'];
 }
 
-const statusColorMap: Record<string, 'success' | 'warning' | 'danger'> = {
+const statusColorMap: Record<string, 'success' | 'warning' | 'danger' | 'hollow'> = {
   healthy: 'success',
   degraded: 'warning',
   offline: 'danger',
+  unseen: 'hollow',
 };
 
 export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDeps) => {
@@ -64,6 +67,9 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
   const [policyId, setPolicyId] = useState('');
   const [tagsText, setTagsText] = useState('linux,production');
   const [isSubmittingEnroll, setIsSubmittingEnroll] = useState(false);
+  const [enrollmentToken, setEnrollmentToken] = useState('');
+  const [tokenPolicyId, setTokenPolicyId] = useState('');
+  const [isGeneratingEnrollmentToken, setIsGeneratingEnrollmentToken] = useState(false);
 
   const [isPolicyFlyoutOpen, setIsPolicyFlyoutOpen] = useState(false);
   const [editingPolicyId, setEditingPolicyId] = useState<string | null>(null);
@@ -179,6 +185,42 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
       setIsSubmittingEnroll(false);
     }
   }, [agentName, http, loadData, notifications.toasts, policyId, tagsText]);
+
+  const generateEnrollmentToken = useCallback(async () => {
+    if (!policyId) {
+      notifications.toasts.addWarning(
+        i18n.translate('xdrManager.policyRequiredForToken', {
+          defaultMessage: 'Select a policy before generating an enrollment token.',
+        })
+      );
+      return;
+    }
+
+    setIsGeneratingEnrollmentToken(true);
+    try {
+      const response = await http.post<GenerateEnrollmentTokenResponse>('/api/xdr_manager/enrollment_tokens', {
+        body: JSON.stringify({ policyId }),
+      });
+
+      setEnrollmentToken(response.token);
+      setTokenPolicyId(response.policyId);
+
+      notifications.toasts.addSuccess(
+        i18n.translate('xdrManager.generateEnrollmentTokenSuccess', {
+          defaultMessage: 'Enrollment token generated. Use it in xdr-agent enrollment_token.',
+        })
+      );
+    } catch (error) {
+      notifications.toasts.addDanger({
+        title: i18n.translate('xdrManager.generateEnrollmentTokenError', {
+          defaultMessage: 'Unable to generate enrollment token',
+        }),
+        text: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setIsGeneratingEnrollmentToken(false);
+    }
+  }, [http, notifications.toasts, policyId]);
 
   const openCreatePolicyFlyout = useCallback(() => {
     setEditingPolicyId(null);
@@ -688,6 +730,56 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                       placeholder="linux,production"
                     />
                   </EuiFormRow>
+
+                  <EuiHorizontalRule margin="m" />
+
+                  <EuiFormRow
+                    label={i18n.translate('xdrManager.field.enrollmentToken', {
+                      defaultMessage: 'Enrollment token (for xdr-agent)',
+                    })}
+                    helpText={i18n.translate('xdrManager.field.enrollmentTokenHelp', {
+                      defaultMessage:
+                        'Generate a token for the selected policy, then set it as enrollment_token in xdr-agent config.',
+                    })}
+                  >
+                    <EuiFieldText value={enrollmentToken} readOnly placeholder="Generate a token" />
+                  </EuiFormRow>
+
+                  <EuiButton
+                    onClick={generateEnrollmentToken}
+                    isLoading={isGeneratingEnrollmentToken}
+                    iconType="key"
+                  >
+                    {i18n.translate('xdrManager.generateEnrollmentToken', {
+                      defaultMessage: 'Generate enrollment token',
+                    })}
+                  </EuiButton>
+
+                  {enrollmentToken && tokenPolicyId && (
+                    <>
+                      <EuiSpacer size="m" />
+                      <EuiCallOut
+                        title={i18n.translate('xdrManager.tokenGeneratedTitle', {
+                          defaultMessage: 'Token generated',
+                        })}
+                        iconType="check"
+                        color="success"
+                      >
+                        <EuiText size="s" color="subdued">
+                          <p>
+                            {i18n.translate('xdrManager.tokenGeneratedDetails', {
+                              defaultMessage:
+                                'Use this command to register xdr-agent with the generated token.',
+                            })}
+                          </p>
+                        </EuiText>
+                        <EuiSpacer size="s" />
+                        <EuiCodeBlock language="bash" isCopyable>
+                          {`xdr-agent enroll ${enrollmentToken} --config config/config.json`}
+                        </EuiCodeBlock>
+                      </EuiCallOut>
+                    </>
+                  )}
                 </EuiForm>
               </EuiFlyoutBody>
 

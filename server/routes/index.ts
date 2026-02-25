@@ -1,7 +1,11 @@
 import { schema } from '@osd/config-schema';
+import { randomBytes } from 'crypto';
 import { IRouter } from '../../../../src/core/server';
 import {
   AgentStatus,
+  ControlPlaneEnrollRequest,
+  ControlPlaneEnrollResponse,
+  GenerateEnrollmentTokenResponse,
   ListAgentsResponse,
   RunActionRequest,
   RunActionResponse,
@@ -56,6 +60,14 @@ const agents: XdrAgent[] = [
   },
 ];
 
+type EnrollmentTokenRecord = {
+  token: string;
+  policyId: string;
+  createdAt: string;
+};
+
+const enrollmentTokens: EnrollmentTokenRecord[] = [];
+
 const actionToStatusMap: Record<XdrAction, AgentStatus> = {
   restart: 'healthy',
   isolate: 'offline',
@@ -82,6 +94,24 @@ const toPolicyId = (value: string): string => {
   return normalized || `policy-${Date.now()}`;
 };
 
+const issueEnrollmentToken = (): string => {
+  return `xdr_enroll_${randomBytes(24).toString('base64url')}`;
+};
+
+const readBearerToken = (authorization: string | string[] | undefined): string | null => {
+  if (!authorization) {
+    return null;
+  }
+
+  const value = Array.isArray(authorization) ? authorization[0] : authorization;
+  const match = /^Bearer\s+(.+)$/i.exec(value.trim());
+  if (!match) {
+    return null;
+  }
+
+  return match[1].trim() || null;
+};
+
 const policyRequestSchema = schema.object({
   name: schema.string({ minLength: 1 }),
   description: schema.string({ minLength: 1 }),
@@ -97,6 +127,131 @@ const policyRequestSchema = schema.object({
 });
 
 export function defineRoutes(router: IRouter) {
+  router.post(
+    {
+      path: '/api/xdr_manager/enrollment_tokens',
+      validate: {
+        body: schema.object({
+          policyId: schema.string({ minLength: 1 }),
+        }),
+      },
+    },
+    async (_context, request, response) => {
+      const selectedPolicy = policies.find((policy) => policy.id === request.body.policyId);
+
+      if (!selectedPolicy) {
+        return response.badRequest({
+          body: `Unknown policy [${request.body.policyId}]`,
+        });
+      }
+
+      const token = issueEnrollmentToken();
+      const createdAt = new Date().toISOString();
+      enrollmentTokens.unshift({
+        token,
+        policyId: request.body.policyId,
+        createdAt,
+      });
+
+      const body: GenerateEnrollmentTokenResponse = {
+        token,
+        policyId: request.body.policyId,
+        createdAt,
+      };
+
+      return response.ok({ body });
+    }
+  );
+
+  router.post(
+    {
+      path: '/api/v1/agents/enroll',
+      validate: {
+        body: schema.object({
+          agent_id: schema.string({ minLength: 1 }),
+          machine_id: schema.string({ minLength: 1 }),
+          hostname: schema.string({ minLength: 1 }),
+          architecture: schema.string({ minLength: 1 }),
+          os_type: schema.string({ minLength: 1 }),
+          ip_addresses: schema.arrayOf(schema.string()),
+          policy_id: schema.string({ minLength: 1 }),
+          tags: schema.arrayOf(schema.string()),
+          agent_version: schema.string({ minLength: 1 }),
+        }),
+      },
+      options: {
+        authRequired: false,
+      },
+    },
+    async (_context, request, response) => {
+      const bearerToken = readBearerToken(request.headers.authorization);
+      if (!bearerToken) {
+        return response.unauthorized({
+          body: {
+            message: 'Missing or invalid Authorization header',
+          },
+        });
+      }
+
+      const tokenRecord = enrollmentTokens.find((item) => item.token === bearerToken);
+      if (!tokenRecord) {
+        return response.unauthorized({
+          body: {
+            message: 'Enrollment token is invalid',
+          },
+        });
+      }
+
+      const payload = request.body as ControlPlaneEnrollRequest;
+      if (tokenRecord.policyId !== payload.policy_id) {
+        return response.badRequest({
+          body: {
+            message: `Enrollment token policy mismatch: token=${tokenRecord.policyId} request=${payload.policy_id}`,
+          },
+        });
+      }
+
+      const selectedPolicy = policies.find((policy) => policy.id === payload.policy_id);
+      if (!selectedPolicy) {
+        return response.badRequest({
+          body: {
+            message: `Unknown policy [${payload.policy_id}]`,
+          },
+        });
+      }
+
+      const now = new Date().toISOString();
+      const existingAgent = agents.find((item) => item.id === payload.agent_id);
+
+      if (existingAgent) {
+        existingAgent.name = payload.hostname;
+        existingAgent.policyId = payload.policy_id;
+        existingAgent.status = 'healthy';
+        existingAgent.lastSeen = now;
+        existingAgent.tags = payload.tags;
+        existingAgent.version = payload.agent_version;
+      } else {
+        const newAgent: XdrAgent = {
+          id: payload.agent_id,
+          name: payload.hostname,
+          policyId: payload.policy_id,
+          status: 'healthy',
+          lastSeen: now,
+          tags: payload.tags,
+          version: payload.agent_version,
+        };
+        agents.unshift(newAgent);
+      }
+
+      const body: ControlPlaneEnrollResponse = {
+        enrollment_id: payload.agent_id,
+        message: `enrolled agent ${payload.hostname}`,
+      };
+
+      return response.ok({ body });
+    }
+  );
+
   router.get(
     {
       path: '/api/xdr_manager/agents',
@@ -136,7 +291,7 @@ export function defineRoutes(router: IRouter) {
         id: `agent-${Date.now()}`,
         name: request.body.name,
         policyId: request.body.policyId,
-        status: 'healthy',
+        status: 'unseen',
         lastSeen: new Date().toISOString(),
         tags: request.body.tags ?? [],
         version: '1.0.0',
