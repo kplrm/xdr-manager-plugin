@@ -141,7 +141,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
     [policies]
   );
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (showErrorToast = true) => {
     setIsLoading(true);
     try {
       const response = await http.get<ListAgentsResponse>('/api/xdr_manager/agents');
@@ -151,12 +151,14 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
         setPolicyId(response.policies[0].id);
       }
     } catch (error) {
-      notifications.toasts.addDanger({
-        title: i18n.translate('xdrManager.loadDataError', {
-          defaultMessage: 'Unable to load XDR data',
-        }),
-        text: error instanceof Error ? error.message : String(error),
-      });
+      if (showErrorToast) {
+        notifications.toasts.addDanger({
+          title: i18n.translate('xdrManager.loadDataError', {
+            defaultMessage: 'Unable to load XDR data',
+          }),
+          text: error instanceof Error ? error.message : String(error),
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -165,6 +167,18 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (activeTab !== 'agents') {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      loadData(false);
+    }, 5000);
+
+    return () => window.clearInterval(timer);
+  }, [activeTab, loadData]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -839,7 +853,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                         )}
                         <EuiSpacer size="s" />
                         <EuiCodeBlock language="bash" isCopyable>
-                          {`xdr-agent enroll ${enrollmentToken} --config config/config.json`}
+                          {`sudo xdr-agent enroll ${enrollmentToken} --config /etc/xdr-agent/config.json`}
                         </EuiCodeBlock>
                       </EuiCallOut>
                     </>
