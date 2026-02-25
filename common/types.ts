@@ -75,6 +75,19 @@ export interface ControlPlaneEnrollResponse {
   message: string;
 }
 
+export interface ControlPlaneHeartbeatRequest {
+  agent_id: string;
+  machine_id: string;
+  hostname: string;
+  policy_id: string;
+  tags: string[];
+  agent_version: string;
+}
+
+export interface ControlPlaneHeartbeatResponse {
+  message: string;
+}
+
 export interface RunActionRequest {
   action: XdrAction;
 }

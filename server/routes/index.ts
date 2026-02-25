@@ -3,6 +3,8 @@ import { randomBytes } from 'crypto';
 import { IRouter } from '../../../../src/core/server';
 import {
   AgentStatus,
+  ControlPlaneHeartbeatRequest,
+  ControlPlaneHeartbeatResponse,
   ControlPlaneEnrollRequest,
   ControlPlaneEnrollResponse,
   EnrollmentTokenStatusResponse,
@@ -327,6 +329,50 @@ export function defineRoutes(router: IRouter) {
       tokenRecord.consumedAt = now;
       tokenRecord.consumedAgentId = payload.agent_id;
       tokenRecord.consumedHostname = payload.hostname;
+
+      return response.ok({ body });
+    }
+  );
+
+  router.post(
+    {
+      path: '/api/v1/agents/heartbeat',
+      validate: {
+        body: schema.object({
+          agent_id: schema.string({ minLength: 1 }),
+          machine_id: schema.string({ minLength: 1 }),
+          hostname: schema.string({ minLength: 1 }),
+          policy_id: schema.string({ minLength: 1 }),
+          tags: schema.arrayOf(schema.string()),
+          agent_version: schema.string({ minLength: 1 }),
+        }),
+      },
+      options: {
+        authRequired: false,
+      },
+    },
+    async (_context, request, response) => {
+      const payload = request.body as ControlPlaneHeartbeatRequest;
+      const agent = agents.find((item) => item.id === payload.agent_id);
+
+      if (!agent) {
+        return response.notFound({
+          body: {
+            message: `Agent [${payload.agent_id}] not found`,
+          },
+        });
+      }
+
+      agent.name = payload.hostname;
+      agent.policyId = payload.policy_id;
+      agent.status = 'healthy';
+      agent.lastSeen = new Date().toISOString();
+      agent.tags = payload.tags;
+      agent.version = payload.agent_version;
+
+      const body: ControlPlaneHeartbeatResponse = {
+        message: `heartbeat accepted for ${payload.hostname}`,
+      };
 
       return response.ok({ body });
     }
