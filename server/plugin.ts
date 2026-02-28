@@ -18,7 +18,7 @@ export class XdrManagerPlugin implements Plugin<XdrManagerPluginSetup, XdrManage
   public setup(core: CoreSetup): XdrManagerPluginSetup {
     this.logger.debug('xdr_manager: setup');
     const router = core.http.createRouter();
-    defineRoutes(router);
+    defineRoutes(router, this.logger);
     return {};
   }
 

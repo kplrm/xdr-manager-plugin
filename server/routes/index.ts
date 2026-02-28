@@ -1,12 +1,14 @@
 import { schema } from '@osd/config-schema';
 import { randomBytes } from 'crypto';
-import { IRouter } from '../../../../src/core/server';
+import { IRouter, Logger } from '../../../../src/core/server';
 import {
   AgentStatus,
   ControlPlaneHeartbeatRequest,
   ControlPlaneHeartbeatResponse,
   ControlPlaneEnrollRequest,
   ControlPlaneEnrollResponse,
+  ControlPlaneTelemetryRequest,
+  ControlPlaneTelemetryResponse,
   EnrollmentTokenStatusResponse,
   GenerateEnrollmentTokenResponse,
   ListAgentsResponse,
@@ -151,7 +153,7 @@ const policyRequestSchema = schema.object({
   ]),
 });
 
-export function defineRoutes(router: IRouter) {
+export function defineRoutes(router: IRouter, logger: Logger) {
   router.post(
     {
       path: '/api/xdr_manager/enrollment_tokens',
@@ -592,6 +594,144 @@ export function defineRoutes(router: IRouter) {
       };
 
       return response.ok({ body });
+    }
+  );
+
+  // ── Telemetry ingestion ─────────────────────────────────────────────────
+  // Agent-facing endpoint: receives batched telemetry events and indexes
+  // them into OpenSearch under .xdr-agent-telemetry-YYYY.MM.DD.
+
+  const XDR_TELEMETRY_INDEX_PREFIX = '.xdr-agent-telemetry';
+
+  const telemetryEventSchema = schema.object({
+    id: schema.string(),
+    '@timestamp': schema.string(),
+    'event.type': schema.string(),
+    'event.category': schema.string(),
+    'event.kind': schema.string(),
+    'event.severity': schema.number(),
+    'event.module': schema.string(),
+    'agent.id': schema.string(),
+    'host.hostname': schema.string(),
+    payload: schema.maybe(schema.recordOf(schema.string(), schema.any())),
+    'threat.tactic.name': schema.maybe(schema.string()),
+    'threat.technique.id': schema.maybe(schema.string()),
+    'threat.technique.subtechnique.id': schema.maybe(schema.string()),
+    tags: schema.maybe(schema.arrayOf(schema.string())),
+  });
+
+  router.post(
+    {
+      path: '/api/v1/agents/telemetry',
+      validate: {
+        body: schema.object({
+          agent_id: schema.string({ minLength: 1 }),
+          events: schema.arrayOf(telemetryEventSchema, { minSize: 1, maxSize: 5000 }),
+        }),
+      },
+      options: {
+        authRequired: false,
+      },
+    },
+    async (context, request, response) => {
+      const payload = request.body as ControlPlaneTelemetryRequest;
+
+      // Validate that the agent exists
+      const agent = agents.find((item) => item.id === payload.agent_id);
+      if (!agent) {
+        return response.notFound({
+          body: {
+            message: `Agent [${payload.agent_id}] not found`,
+          },
+        });
+      }
+
+      // Build the daily index name
+      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      const indexName = `${XDR_TELEMETRY_INDEX_PREFIX}-${today}`;
+
+      try {
+        const opensearchClient = context.core.opensearch.client.asInternalUser;
+
+        // Ensure the index exists (create if missing, ignore if already exists)
+        const indexExists = await opensearchClient.indices.exists({ index: indexName });
+        if (!indexExists.body) {
+          await opensearchClient.indices.create({
+            index: indexName,
+            body: {
+              settings: {
+                number_of_shards: 1,
+                number_of_replicas: 0,
+                'index.hidden': true,
+              },
+              mappings: {
+                properties: {
+                  '@timestamp': { type: 'date' },
+                  'event.type': { type: 'keyword' },
+                  'event.category': { type: 'keyword' },
+                  'event.kind': { type: 'keyword' },
+                  'event.severity': { type: 'integer' },
+                  'event.module': { type: 'keyword' },
+                  'agent.id': { type: 'keyword' },
+                  'host.hostname': { type: 'keyword' },
+                  tags: { type: 'keyword' },
+                  'threat.tactic.name': { type: 'keyword' },
+                  'threat.technique.id': { type: 'keyword' },
+                  'threat.technique.subtechnique.id': { type: 'keyword' },
+                  payload: { type: 'object', enabled: true, dynamic: true },
+                },
+              },
+            },
+          });
+          logger.info(`Created telemetry index [${indexName}]`);
+        }
+
+        // Bulk-index all events
+        const bulkBody: Array<Record<string, unknown>> = [];
+        for (const evt of payload.events) {
+          bulkBody.push({ index: { _index: indexName, _id: evt.id } });
+          bulkBody.push({
+            ...evt,
+            // Ensure the agent.id in the document matches the envelope
+            'agent.id': payload.agent_id,
+            indexed_at: new Date().toISOString(),
+          });
+        }
+
+        const bulkResponse = await opensearchClient.bulk({ body: bulkBody });
+
+        if (bulkResponse.body.errors) {
+          const failedItems = bulkResponse.body.items.filter(
+            (item: any) => {
+              const action = item.index || item.create || item.update || item.delete;
+              return action?.error;
+            }
+          );
+          logger.warn(
+            `Bulk index to [${indexName}]: ${failedItems.length}/${payload.events.length} events failed`
+          );
+        }
+
+        const indexed = payload.events.length;
+        logger.debug(
+          `Indexed ${indexed} telemetry events from agent [${payload.agent_id}] into [${indexName}]`
+        );
+
+        const body: ControlPlaneTelemetryResponse = {
+          indexed,
+          message: `${indexed} events indexed into ${indexName}`,
+        };
+
+        return response.ok({ body });
+      } catch (err) {
+        logger.error(`Failed to index telemetry events: ${err}`);
+        return response.customError({
+          statusCode: 502,
+          body: {
+            message: `Failed to index telemetry events: ${err}`,
+          },
+        });
+      }
     }
   );
 }

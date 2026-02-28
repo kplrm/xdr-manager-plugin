@@ -114,3 +114,32 @@ export interface UpsertPolicyRequest {
 export interface UpsertPolicyResponse {
   policy: XdrPolicy;
 }
+
+// ── Telemetry ingestion ────────────────────────────────────────────────────
+
+export interface TelemetryEvent {
+  id: string;
+  '@timestamp': string;
+  'event.type': string;
+  'event.category': string;
+  'event.kind': string;
+  'event.severity': number;
+  'event.module': string;
+  'agent.id': string;
+  'host.hostname': string;
+  payload?: Record<string, unknown>;
+  'threat.tactic.name'?: string;
+  'threat.technique.id'?: string;
+  'threat.technique.subtechnique.id'?: string;
+  tags?: string[];
+}
+
+export interface ControlPlaneTelemetryRequest {
+  agent_id: string;
+  events: TelemetryEvent[];
+}
+
+export interface ControlPlaneTelemetryResponse {
+  indexed: number;
+  message: string;
+}
