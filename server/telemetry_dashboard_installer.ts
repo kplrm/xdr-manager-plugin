@@ -18,7 +18,8 @@ const VIS_PROCESS_EVENTS = 'xdr-tel-vis-process-events';
 const VIS_NETWORK_EVENTS = 'xdr-tel-vis-network-events';
 const VIS_EVENT_TYPE_PIE = 'xdr-tel-vis-event-type-pie';
 const VIS_MEMORY_TIMELINE = 'xdr-tel-vis-memory-timeline';
-const VIS_RECENT_EVENTS = 'xdr-tel-vis-recent-events';
+const VIS_CPU_PER_AGENT = 'xdr-tel-vis-cpu-per-agent';
+const VIS_CPU_PER_PROCESS = 'xdr-tel-vis-cpu-per-process';
 const DASHBOARD_ID = 'xdr-agent-telemetry-dashboard';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -383,71 +384,191 @@ function buildSavedObjects() {
     references: [],
   };
 
-  // 8 — Recent events table (saved search style via data_table vis)
-  const visRecentEvents = {
+  // 8 — CPU usage per agent (area chart)
+  const visCpuPerAgent = {
     type: 'visualization',
-    id: VIS_RECENT_EVENTS,
+    id: VIS_CPU_PER_AGENT,
     attributes: {
-      title: '[XDR] Recent Telemetry Events',
+      title: '[XDR] CPU Usage per Agent',
       visState: JSON.stringify({
-        title: '[XDR] Recent Telemetry Events',
-        type: 'table',
+        title: '[XDR] CPU Usage per Agent',
+        type: 'area',
         params: {
-          perPage: 20,
-          showPartialRows: false,
-          showMetricsAtAllLevels: false,
-          sort: { columnIndex: null, direction: null },
-          showTotal: false,
-          totalFunc: 'sum',
-          percentageCol: '',
+          type: 'area',
+          grid: { categoryLines: false, style: { color: '#eee' } },
+          categoryAxes: [
+            {
+              id: 'CategoryAxis-1',
+              type: 'category',
+              position: 'bottom',
+              show: true,
+              style: {},
+              scale: { type: 'linear' },
+              labels: { show: true, truncate: 100, filter: true },
+              title: {},
+            },
+          ],
+          valueAxes: [
+            {
+              id: 'ValueAxis-1',
+              name: 'LeftAxis-1',
+              type: 'value',
+              position: 'left',
+              show: true,
+              style: {},
+              scale: { type: 'linear', mode: 'normal' },
+              labels: { show: true, rotate: 0, filter: false, truncate: 100 },
+              title: { text: 'CPU Usage %' },
+            },
+          ],
+          seriesParams: [
+            {
+              show: true,
+              type: 'area',
+              mode: 'normal',
+              data: { label: 'Avg CPU %', id: '1' },
+              drawLinesBetweenPoints: true,
+              showCircles: true,
+              interpolate: 'linear',
+              lineWidth: 2,
+              valueAxis: 'ValueAxis-1',
+            },
+          ],
+          addTooltip: true,
+          addLegend: true,
+          legendPosition: 'top',
+          times: [],
+          addTimeMarker: false,
         },
         aggs: [
-          { id: '1', enabled: true, type: 'count', schema: 'metric', params: {} },
+          {
+            id: '1',
+            enabled: true,
+            type: 'avg',
+            schema: 'metric',
+            params: { field: 'payload.system.cpu.total_pct', customLabel: 'Avg CPU %' },
+          },
           {
             id: '2',
             enabled: true,
             type: 'date_histogram',
-            schema: 'bucket',
+            schema: 'segment',
             params: {
               field: '@timestamp',
               interval: 'auto',
               min_doc_count: 1,
               extended_bounds: {},
-              customLabel: 'Timestamp',
             },
           },
           {
             id: '3',
             enabled: true,
             type: 'terms',
-            schema: 'bucket',
+            schema: 'group',
             params: {
-              field: 'event.type',
+              field: 'agent.id',
               size: 20,
               order: 'desc',
               orderBy: '1',
-              customLabel: 'Event Type',
-            },
-          },
-          {
-            id: '4',
-            enabled: true,
-            type: 'terms',
-            schema: 'bucket',
-            params: {
-              field: 'host.hostname',
-              size: 50,
-              order: 'desc',
-              orderBy: '1',
-              customLabel: 'Hostname',
+              otherBucket: false,
+              missingBucket: false,
             },
           },
         ],
       }),
-      uiStateJSON: JSON.stringify({ vis: { params: { sort: { columnIndex: 0, direction: 'desc' } } } }),
-      description: 'Table of recent telemetry events by time, type and host',
+      uiStateJSON: '{}',
+      description: 'CPU usage % over time, split by agent (system.cpu events)',
       version: 1,
-      kibanaSavedObjectMeta: { searchSourceJSON: searchSource(INDEX_PATTERN_ID) },
+      kibanaSavedObjectMeta: {
+        searchSourceJSON: searchSource(INDEX_PATTERN_ID, 'event.type: "system.cpu"'),
+      },
+    },
+    references: [],
+  };
+
+  // 9 — CPU per process (horizontal bar chart)
+  const visCpuPerProcess = {
+    type: 'visualization',
+    id: VIS_CPU_PER_PROCESS,
+    attributes: {
+      title: '[XDR] CPU per Process',
+      visState: JSON.stringify({
+        title: '[XDR] CPU per Process',
+        type: 'horizontal_bar',
+        params: {
+          type: 'horizontal_bar',
+          grid: { categoryLines: false, style: { color: '#eee' } },
+          categoryAxes: [
+            {
+              id: 'CategoryAxis-1',
+              type: 'category',
+              position: 'left',
+              show: true,
+              style: {},
+              scale: { type: 'linear' },
+              labels: { show: true, truncate: 200, filter: true },
+              title: {},
+            },
+          ],
+          valueAxes: [
+            {
+              id: 'ValueAxis-1',
+              name: 'BottomAxis-1',
+              type: 'value',
+              position: 'bottom',
+              show: true,
+              style: {},
+              scale: { type: 'linear', mode: 'normal' },
+              labels: { show: true, rotate: 0, filter: false, truncate: 100 },
+              title: { text: 'Avg CPU %' },
+            },
+          ],
+          seriesParams: [
+            {
+              show: true,
+              type: 'histogram',
+              mode: 'normal',
+              data: { label: 'Avg CPU %', id: '1' },
+              valueAxis: 'ValueAxis-1',
+            },
+          ],
+          addTooltip: true,
+          addLegend: true,
+          legendPosition: 'right',
+          times: [],
+          addTimeMarker: false,
+        },
+        aggs: [
+          {
+            id: '1',
+            enabled: true,
+            type: 'avg',
+            schema: 'metric',
+            params: { field: 'payload.process.cpu_pct', customLabel: 'Avg CPU %' },
+          },
+          {
+            id: '2',
+            enabled: true,
+            type: 'terms',
+            schema: 'segment',
+            params: {
+              field: 'payload.process.name',
+              size: 20,
+              order: 'desc',
+              orderBy: '1',
+              otherBucket: false,
+              missingBucket: false,
+              customLabel: 'Process',
+            },
+          },
+        ],
+      }),
+      uiStateJSON: '{}',
+      description: 'Top processes by average CPU usage (process.cpu events)',
+      version: 1,
+      kibanaSavedObjectMeta: {
+        searchSourceJSON: searchSource(INDEX_PATTERN_ID, 'event.type: "process.cpu"'),
+      },
     },
     references: [],
   };
@@ -477,7 +598,7 @@ function buildSavedObjects() {
       title: 'XDR Agent Telemetry',
       hits: 0,
       description:
-        'Out-of-the-box telemetry dashboard for xdr-agent: memory, process, and network events.',
+        'Out-of-the-box telemetry dashboard for xdr-agent: CPU, memory, process, and network events.',
       panelsJSON: JSON.stringify(
         panels.map((p) => ({
           embeddableConfig: {},
@@ -508,19 +629,15 @@ function buildSavedObjects() {
       { name: 'panel_4', type: 'visualization', id: VIS_NETWORK_EVENTS },
       { name: 'panel_5', type: 'visualization', id: VIS_EVENT_TYPE_PIE },
       { name: 'panel_6', type: 'visualization', id: VIS_MEMORY_TIMELINE },
-      { name: 'panel_7', type: 'visualization', id: VIS_MEMORY_TIMELINE }, // intentional: timeline repeated or use gauge
-      { name: 'panel_8', type: 'visualization', id: VIS_RECENT_EVENTS },
+      { name: 'panel_7', type: 'visualization', id: VIS_CPU_PER_AGENT },
+      { name: 'panel_8', type: 'visualization', id: VIS_CPU_PER_PROCESS },
     ],
   };
 
-  // Fix panel_7 — should be the gauge, not timeline repeated
-  dashboard.references[7] = { name: 'panel_7', type: 'visualization', id: VIS_AVG_MEMORY };
-
-  // Rearrange: row 1 = metrics, row 2 = pie + memory-timeline + gauge, row 3 = table
-  // Actually let's fix the layout so gauge is up top and memory-timeline fills middle row better
+  // Layout:
   // Row 0: total-events | active-agents | process-events | network-events | avg-memory-gauge
   // Row 8: event-type-pie (left) | memory-timeline (right, wider)
-  // Row 22: recent events table (full width)
+  // Row 22: CPU per agent (left) | CPU per process (right)
 
   dashboard.references = [
     { name: 'panel_0', type: 'visualization', id: VIS_TOTAL_EVENTS },
@@ -530,7 +647,8 @@ function buildSavedObjects() {
     { name: 'panel_4', type: 'visualization', id: VIS_AVG_MEMORY },
     { name: 'panel_5', type: 'visualization', id: VIS_EVENT_TYPE_PIE },
     { name: 'panel_6', type: 'visualization', id: VIS_MEMORY_TIMELINE },
-    { name: 'panel_7', type: 'visualization', id: VIS_RECENT_EVENTS },
+    { name: 'panel_7', type: 'visualization', id: VIS_CPU_PER_AGENT },
+    { name: 'panel_8', type: 'visualization', id: VIS_CPU_PER_PROCESS },
   ];
 
   dashboard.attributes.panelsJSON = JSON.stringify([
@@ -543,8 +661,9 @@ function buildSavedObjects() {
     // Row 8 — pie chart + memory timeline
     { embeddableConfig: {}, gridData: { x: 0, y: 8, w: 18, h: 14, i: '6' }, panelIndex: '6', version: '2.19.0', panelRefName: 'panel_5' },
     { embeddableConfig: {}, gridData: { x: 18, y: 8, w: 30, h: 14, i: '7' }, panelIndex: '7', version: '2.19.0', panelRefName: 'panel_6' },
-    // Row 22 — events table
-    { embeddableConfig: {}, gridData: { x: 0, y: 22, w: 48, h: 16, i: '8' }, panelIndex: '8', version: '2.19.0', panelRefName: 'panel_7' },
+    // Row 22 — CPU per agent + CPU per process
+    { embeddableConfig: {}, gridData: { x: 0, y: 22, w: 24, h: 14, i: '8' }, panelIndex: '8', version: '2.19.0', panelRefName: 'panel_7' },
+    { embeddableConfig: {}, gridData: { x: 24, y: 22, w: 24, h: 14, i: '9' }, panelIndex: '9', version: '2.19.0', panelRefName: 'panel_8' },
   ]);
 
   return [
@@ -556,7 +675,8 @@ function buildSavedObjects() {
     visNetworkEvents,
     visEventTypePie,
     visMemoryTimeline,
-    visRecentEvents,
+    visCpuPerAgent,
+    visCpuPerProcess,
     dashboard,
   ];
 }
@@ -570,17 +690,30 @@ export async function installTelemetryDashboard(
   const objects = buildSavedObjects();
 
   try {
-    const result = await repo.bulkCreate(objects as any[], { overwrite: true });
-    const errors = result.saved_objects.filter((o: any) => o.error);
-    if (errors.length > 0) {
+    // overwrite:false — skip objects that already exist (idempotent across restarts).
+    // This avoids bumping the seqNo on every startup, which would race with OpenSearch
+    // Dashboards' concurrent index-pattern field-refresh and cause version_conflict errors.
+    const result = await repo.bulkCreate(objects as any[], { overwrite: false });
+
+    const unexpectedErrors = result.saved_objects.filter(
+      (o: any) => o.error && o.error.statusCode !== 409
+    );
+    const skipped = result.saved_objects.filter(
+      (o: any) => o.error && o.error.statusCode === 409
+    ).length;
+    const created = result.saved_objects.filter((o: any) => !o.error).length;
+
+    if (unexpectedErrors.length > 0) {
       logger.warn(
-        `xdr_manager: telemetry dashboard install had ${errors.length} error(s): ` +
-          errors.map((e: any) => `${e.type}/${e.id}: ${e.error.message}`).join('; ')
+        `xdr_manager: telemetry dashboard install had ${unexpectedErrors.length} error(s): ` +
+          unexpectedErrors.map((e: any) => `${e.type}/${e.id}: ${e.error.message}`).join('; ')
+      );
+    } else if (created > 0) {
+      logger.info(
+        `xdr_manager: installed telemetry dashboard (${created} created, ${skipped} already present)`
       );
     } else {
-      logger.info(
-        `xdr_manager: installed telemetry dashboard (${result.saved_objects.length} saved objects)`
-      );
+      logger.debug(`xdr_manager: telemetry dashboard already installed (${skipped} objects present)`);
     }
   } catch (err) {
     logger.error(`xdr_manager: failed to install telemetry dashboard: ${err}`);

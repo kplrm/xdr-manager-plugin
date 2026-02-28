@@ -1,6 +1,6 @@
 import { schema } from '@osd/config-schema';
 import { randomBytes } from 'crypto';
-import { IRouter, Logger } from '../../../../src/core/server';
+import { IRouter, ISavedObjectsRepository, Logger } from '../../../../src/core/server';
 import {
   AgentStatus,
   ControlPlaneHeartbeatRequest,
@@ -19,6 +19,7 @@ import {
   XdrAction,
   XdrAgent,
   XdrPolicy,
+  XDR_AGENT_SAVED_OBJECT_TYPE,
 } from '../../common';
 
 const policies: XdrPolicy[] = [
@@ -44,26 +45,19 @@ const policies: XdrPolicy[] = [
   },
 ];
 
-const agents: XdrAgent[] = [
-  {
-    id: 'agent-001',
-    name: 'edge-node-01',
-    policyId: 'default-endpoint',
-    status: 'healthy',
-    lastSeen: new Date().toISOString(),
-    tags: ['linux', 'production'],
-    version: '1.0.0',
-  },
-  {
-    id: 'agent-002',
-    name: 'payments-node-03',
-    policyId: 'high-security-linux',
-    status: 'degraded',
-    lastSeen: new Date(Date.now() - 120_000).toISOString(),
-    tags: ['linux', 'payments'],
-    version: '1.0.0',
-  },
-];
+type XdrAgentAttributes = Omit<XdrAgent, 'id'>;
+
+function toXdrAgent(so: { id: string; attributes: XdrAgentAttributes }): XdrAgent {
+  return {
+    id: so.id,
+    name: so.attributes.name,
+    policyId: so.attributes.policyId,
+    status: so.attributes.status,
+    lastSeen: so.attributes.lastSeen,
+    tags: so.attributes.tags,
+    version: so.attributes.version,
+  };
+}
 
 type EnrollmentTokenRecord = {
   token: string;
@@ -153,7 +147,11 @@ const policyRequestSchema = schema.object({
   ]),
 });
 
-export function defineRoutes(router: IRouter, logger: Logger) {
+export function defineRoutes(
+  router: IRouter,
+  logger: Logger,
+  agentRepoPromise: Promise<ISavedObjectsRepository>
+) {
   router.post(
     {
       path: '/api/xdr_manager/enrollment_tokens',
@@ -287,40 +285,48 @@ export function defineRoutes(router: IRouter, logger: Logger) {
       }
 
       const now = new Date().toISOString();
-      const existingAgent = agents.find((item) => item.id === payload.agent_id);
+      const repo = await agentRepoPromise;
+      const agentAttrs: XdrAgentAttributes = {
+        name: payload.hostname,
+        policyId: payload.policy_id,
+        status: 'healthy',
+        lastSeen: now,
+        tags: payload.tags,
+        version: payload.agent_version,
+      };
+
+      let existingAgent: { id: string; attributes: XdrAgentAttributes } | null = null;
+      try {
+        existingAgent = await repo.get<XdrAgentAttributes>(
+          XDR_AGENT_SAVED_OBJECT_TYPE,
+          payload.agent_id
+        );
+      } catch (err: any) {
+        if (err?.output?.statusCode !== 404) throw err;
+      }
 
       if (existingAgent) {
-        existingAgent.name = payload.hostname;
-        existingAgent.policyId = payload.policy_id;
-        existingAgent.status = 'healthy';
-        existingAgent.lastSeen = now;
-        existingAgent.tags = payload.tags;
-        existingAgent.version = payload.agent_version;
+        await repo.update(XDR_AGENT_SAVED_OBJECT_TYPE, payload.agent_id, agentAttrs);
       } else {
-        const placeholder = agents.find(
-          (item) => isUnknownUnseenPlaceholder(item) && item.policyId === payload.policy_id
+        // Check for an "unseen" placeholder agent for this policy
+        const placeholders = await repo.find<XdrAgentAttributes>({
+          type: XDR_AGENT_SAVED_OBJECT_TYPE,
+          perPage: 10000,
+        });
+        const placeholder = placeholders.saved_objects.find(
+          (so) =>
+            isUnknownUnseenPlaceholder(toXdrAgent(so)) &&
+            so.attributes.policyId === payload.policy_id
         );
 
         if (placeholder) {
-          placeholder.id = payload.agent_id;
-          placeholder.name = payload.hostname;
-          placeholder.policyId = payload.policy_id;
-          placeholder.status = 'healthy';
-          placeholder.lastSeen = now;
-          placeholder.tags = payload.tags;
-          placeholder.version = payload.agent_version;
-        } else {
-          const newAgent: XdrAgent = {
-            id: payload.agent_id,
-            name: payload.hostname,
-            policyId: payload.policy_id,
-            status: 'healthy',
-            lastSeen: now,
-            tags: payload.tags,
-            version: payload.agent_version,
-          };
-          agents.unshift(newAgent);
+          // Replace the placeholder with the real agent
+          await repo.delete(XDR_AGENT_SAVED_OBJECT_TYPE, placeholder.id);
         }
+
+        await repo.create<XdrAgentAttributes>(XDR_AGENT_SAVED_OBJECT_TYPE, agentAttrs, {
+          id: payload.agent_id,
+        });
       }
 
       const body: ControlPlaneEnrollResponse = {
@@ -355,22 +361,29 @@ export function defineRoutes(router: IRouter, logger: Logger) {
     },
     async (_context, request, response) => {
       const payload = request.body as ControlPlaneHeartbeatRequest;
-      const agent = agents.find((item) => item.id === payload.agent_id);
+      const repo = await agentRepoPromise;
 
-      if (!agent) {
-        return response.notFound({
-          body: {
-            message: `Agent [${payload.agent_id}] not found`,
-          },
-        });
+      try {
+        await repo.get<XdrAgentAttributes>(XDR_AGENT_SAVED_OBJECT_TYPE, payload.agent_id);
+      } catch (err: any) {
+        if (err?.output?.statusCode === 404) {
+          return response.notFound({
+            body: {
+              message: `Agent [${payload.agent_id}] not found`,
+            },
+          });
+        }
+        throw err;
       }
 
-      agent.name = payload.hostname;
-      agent.policyId = payload.policy_id;
-      agent.status = 'healthy';
-      agent.lastSeen = new Date().toISOString();
-      agent.tags = payload.tags;
-      agent.version = payload.agent_version;
+      await repo.update(XDR_AGENT_SAVED_OBJECT_TYPE, payload.agent_id, {
+        name: payload.hostname,
+        policyId: payload.policy_id,
+        status: 'healthy' as AgentStatus,
+        lastSeen: new Date().toISOString(),
+        tags: payload.tags,
+        version: payload.agent_version,
+      });
 
       const body: ControlPlaneHeartbeatResponse = {
         message: `heartbeat accepted for ${payload.hostname}`,
@@ -386,13 +399,24 @@ export function defineRoutes(router: IRouter, logger: Logger) {
       validate: false,
     },
     async (_context, _request, response) => {
+      const repo = await agentRepoPromise;
+      const result = await repo.find<XdrAgentAttributes>({
+        type: XDR_AGENT_SAVED_OBJECT_TYPE,
+        perPage: 10000,
+        sortField: 'lastSeen',
+        sortOrder: 'desc',
+      });
+
       const nowMs = Date.now();
       const body: ListAgentsResponse = {
-        agents: agents.map((agent) => ({
-          ...agent,
-          name: agent.status === 'unseen' ? 'unknown' : agent.name,
-          status: deriveAgentStatus(agent, nowMs),
-        })),
+        agents: result.saved_objects.map((so) => {
+          const agent = toXdrAgent(so);
+          return {
+            ...agent,
+            name: agent.status === 'unseen' ? 'unknown' : agent.name,
+            status: deriveAgentStatus(agent, nowMs),
+          };
+        }),
         policies,
       };
 
@@ -420,8 +444,9 @@ export function defineRoutes(router: IRouter, logger: Logger) {
         });
       }
 
-      const newAgent: XdrAgent = {
-        id: `agent-${Date.now()}`,
+      const repo = await agentRepoPromise;
+      const agentId = `agent-${Date.now()}`;
+      const attrs: XdrAgentAttributes = {
         name: 'unknown',
         policyId: request.body.policyId,
         status: 'unseen',
@@ -430,7 +455,11 @@ export function defineRoutes(router: IRouter, logger: Logger) {
         version: '1.0.0',
       };
 
-      agents.unshift(newAgent);
+      await repo.create<XdrAgentAttributes>(XDR_AGENT_SAVED_OBJECT_TYPE, attrs, {
+        id: agentId,
+      });
+
+      const newAgent: XdrAgent = { id: agentId, ...attrs };
 
       return response.ok({
         body: {
@@ -539,7 +568,16 @@ export function defineRoutes(router: IRouter, logger: Logger) {
         });
       }
 
-      if (agents.some((agent) => agent.policyId === request.params.id)) {
+      const agentRepo = await agentRepoPromise;
+      const assignedResult = await agentRepo.find<XdrAgentAttributes>({
+        type: XDR_AGENT_SAVED_OBJECT_TYPE,
+        perPage: 10000,
+      });
+      if (
+        assignedResult.saved_objects.some(
+          (so) => so.attributes.policyId === request.params.id
+        )
+      ) {
         return response.badRequest({
           body: `Policy [${request.params.id}] is currently assigned to one or more agents.`,
         });
@@ -572,21 +610,39 @@ export function defineRoutes(router: IRouter, logger: Logger) {
       },
     },
     async (_context, request, response) => {
-      const agent = agents.find((item) => item.id === request.params.id);
+      const repo = await agentRepoPromise;
 
-      if (!agent) {
-        return response.notFound({
-          body: `Agent [${request.params.id}] not found`,
-        });
+      let existing;
+      try {
+        existing = await repo.get<XdrAgentAttributes>(
+          XDR_AGENT_SAVED_OBJECT_TYPE,
+          request.params.id
+        );
+      } catch (err: any) {
+        if (err?.output?.statusCode === 404) {
+          return response.notFound({
+            body: `Agent [${request.params.id}] not found`,
+          });
+        }
+        throw err;
       }
 
       const { action } = request.body as RunActionRequest;
 
-      agent.status = actionToStatusMap[action];
-      agent.lastSeen = new Date().toISOString();
+      const updates: Partial<XdrAgentAttributes> = {
+        status: actionToStatusMap[action],
+        lastSeen: new Date().toISOString(),
+      };
       if (action === 'upgrade') {
-        agent.version = bumpVersion(agent.version);
+        updates.version = bumpVersion(existing.attributes.version);
       }
+
+      await repo.update(XDR_AGENT_SAVED_OBJECT_TYPE, request.params.id, updates);
+
+      const agent: XdrAgent = {
+        ...toXdrAgent(existing),
+        ...updates,
+      };
 
       const body: RunActionResponse = {
         agent,
@@ -636,16 +692,6 @@ export function defineRoutes(router: IRouter, logger: Logger) {
     async (context, request, response) => {
       const payload = request.body as ControlPlaneTelemetryRequest;
 
-      // Validate that the agent exists
-      const agent = agents.find((item) => item.id === payload.agent_id);
-      if (!agent) {
-        return response.notFound({
-          body: {
-            message: `Agent [${payload.agent_id}] not found`,
-          },
-        });
-      }
-
       // Build the daily index name
       const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
       const indexName = `${XDR_TELEMETRY_INDEX_PREFIX}-${today}`;
@@ -678,7 +724,72 @@ export function defineRoutes(router: IRouter, logger: Logger) {
                   'threat.tactic.name': { type: 'keyword' },
                   'threat.technique.id': { type: 'keyword' },
                   'threat.technique.subtechnique.id': { type: 'keyword' },
-                  payload: { type: 'object', enabled: true, dynamic: true },
+                  payload: {
+                    type: 'object',
+                    dynamic: true,
+                    properties: {
+                      system: {
+                        properties: {
+                          memory: {
+                            properties: {
+                              total_bytes: { type: 'long' },
+                              used_bytes: { type: 'long' },
+                              free_bytes: { type: 'long' },
+                              available_bytes: { type: 'long' },
+                              buffers_bytes: { type: 'long' },
+                              cached_bytes: { type: 'long' },
+                              swap_total_bytes: { type: 'long' },
+                              swap_free_bytes: { type: 'long' },
+                              swap_used_bytes: { type: 'long' },
+                              used_percent: { type: 'float' },
+                            },
+                          },
+                          cpu: {
+                            properties: {
+                              total_pct: { type: 'float' },
+                              user_pct: { type: 'float' },
+                              system_pct: { type: 'float' },
+                              idle_pct: { type: 'float' },
+                              iowait_pct: { type: 'float' },
+                              steal_pct: { type: 'float' },
+                              cores: { type: 'integer' },
+                            },
+                          },
+                        },
+                      },
+                      process: {
+                        properties: {
+                          pid: { type: 'integer' },
+                          ppid: { type: 'integer' },
+                          name: { type: 'keyword' },
+                          executable: { type: 'keyword' },
+                          command_line: { type: 'keyword' },
+                          cpu_pct: { type: 'float' },
+                          state: { type: 'keyword' },
+                          start_time: { type: 'date' },
+                        },
+                      },
+                      network: {
+                        properties: {
+                          type: { type: 'keyword' },
+                          transport: { type: 'keyword' },
+                          direction: { type: 'keyword' },
+                        },
+                      },
+                      source: {
+                        properties: {
+                          ip: { type: 'ip' },
+                          port: { type: 'integer' },
+                        },
+                      },
+                      destination: {
+                        properties: {
+                          ip: { type: 'ip' },
+                          port: { type: 'integer' },
+                        },
+                      },
+                    },
+                  },
                 },
               },
             },
