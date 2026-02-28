@@ -182,7 +182,7 @@ function buildSavedObjects() {
             enabled: true,
             type: 'avg',
             schema: 'metric',
-            params: { field: 'payload.used_percent', customLabel: 'Avg Memory %' },
+            params: { field: 'payload.system.memory.used_percent', customLabel: 'Avg Memory %' },
           },
         ],
       }),
@@ -343,7 +343,7 @@ function buildSavedObjects() {
             enabled: true,
             type: 'avg',
             schema: 'metric',
-            params: { field: 'payload.used_percent', customLabel: 'Avg Memory %' },
+            params: { field: 'payload.system.memory.used_percent', customLabel: 'Avg Memory %' },
           },
           {
             id: '2',
@@ -435,7 +435,7 @@ function buildSavedObjects() {
             type: 'terms',
             schema: 'bucket',
             params: {
-              field: 'agent.hostname',
+              field: 'host.hostname',
               size: 50,
               order: 'desc',
               orderBy: '1',
