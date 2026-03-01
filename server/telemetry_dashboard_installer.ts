@@ -1,12 +1,13 @@
 /*
- * Installs pre-built index-patterns, visualizations, and THREE dashboards
+ * Installs pre-built index-patterns, visualizations, and FOUR dashboards
  * for XDR Agent Telemetry, organised into tab-like views:
- *   - Host   — system CPU & memory metrics
- *   - Process — per-process CPU usage
- *   - Network — connection events, protocol/state distribution
+ *   - Host    — system CPU & memory metrics
+ *   - Process  — per-process CPU usage
+ *   - Network  — connection events, protocol/state distribution
+ *   - Files    — File Integrity Monitoring (FIM) events, actions, top paths
  *
  * Each dashboard carries a markdown "navigation bar" panel at the top whose
- * links point at the other two dashboards, giving users a tab-switching UX
+ * links point at the other dashboards, giving users a tab-switching UX
  * inside native OpenSearch Dashboards.
  *
  * Called once from plugin.start().
@@ -21,11 +22,13 @@ const INDEX_PATTERN_ID = 'xdr-agent-telemetry';
 const DASH_HOST = 'xdr-agent-telemetry-dashboard';        // reuse original ID
 const DASH_PROCESS = 'xdr-agent-telemetry-processes';
 const DASH_NETWORK = 'xdr-agent-telemetry-network';
+const DASH_FILE    = 'xdr-agent-telemetry-file';
 
 // Markdown navigation visualizations (one per dashboard)
-const NAV_HOST = 'xdr-tel-nav-host';
+const NAV_HOST    = 'xdr-tel-nav-host';
 const NAV_PROCESS = 'xdr-tel-nav-process';
 const NAV_NETWORK = 'xdr-tel-nav-network';
+const NAV_FILE    = 'xdr-tel-nav-file';
 
 // Host visualizations
 const VIS_HOST_EVENTS = 'xdr-tel-vis-host-events';
@@ -57,12 +60,52 @@ const VIS_PROC_USER_PIE     = 'xdr-tel-vis-proc-user-pie';
 
 // Network visualizations
 const VIS_NETWORK_EVENTS = 'xdr-tel-vis-network-events';
-const VIS_NET_INBOUND = 'xdr-tel-vis-net-inbound';
-const VIS_NET_OUTBOUND = 'xdr-tel-vis-net-outbound';
-const VIS_NET_PROTOCOL = 'xdr-tel-vis-net-protocol';
-const VIS_NET_STATE = 'xdr-tel-vis-net-state';
-const VIS_NET_DIRECTION = 'xdr-tel-vis-net-direction';
-const VIS_NET_TIMELINE = 'xdr-tel-vis-net-timeline';
+const VIS_NET_INBOUND    = 'xdr-tel-vis-net-inbound';
+const VIS_NET_OUTBOUND   = 'xdr-tel-vis-net-outbound';
+const VIS_NET_PROTOCOL   = 'xdr-tel-vis-net-protocol';
+const VIS_NET_STATE      = 'xdr-tel-vis-net-state';
+const VIS_NET_DIRECTION  = 'xdr-tel-vis-net-direction';
+const VIS_NET_TIMELINE   = 'xdr-tel-vis-net-timeline';
+
+// File / FIM visualizations
+const VIS_FIM_EVENTS     = 'xdr-tel-vis-fim-events';
+const VIS_FIM_CREATED    = 'xdr-tel-vis-fim-created';
+const VIS_FIM_MODIFIED   = 'xdr-tel-vis-fim-modified';
+const VIS_FIM_DELETED    = 'xdr-tel-vis-fim-deleted';
+const VIS_FIM_ACTION_PIE = 'xdr-tel-vis-fim-action-pie';
+const VIS_FIM_FILE_TYPES = 'xdr-tel-vis-fim-file-types';
+const VIS_FIM_BY_OWNER   = 'xdr-tel-vis-fim-owner';
+const VIS_FIM_TIMELINE   = 'xdr-tel-vis-fim-timeline';
+const VIS_FIM_TOP_DIRS   = 'xdr-tel-vis-fim-top-dirs';
+const VIS_FIM_TOP_FILES  = 'xdr-tel-vis-fim-top-files';
+
+// DNS visualizations
+const DASH_DNS             = 'xdr-agent-telemetry-dns';
+const NAV_DNS              = 'xdr-tel-nav-dns';
+const VIS_DNS_EVENTS       = 'xdr-tel-vis-dns-events';
+const VIS_DNS_QUERIES      = 'xdr-tel-vis-dns-queries';
+const VIS_DNS_ANSWERS      = 'xdr-tel-vis-dns-answers';
+const VIS_DNS_NXDOMAIN     = 'xdr-tel-vis-dns-nxdomain';
+const VIS_DNS_QTYPE_PIE    = 'xdr-tel-vis-dns-qtype-pie';
+const VIS_DNS_RCODE_PIE    = 'xdr-tel-vis-dns-rcode-pie';
+const VIS_DNS_TOP_PROCS    = 'xdr-tel-vis-dns-top-procs';
+const VIS_DNS_TIMELINE     = 'xdr-tel-vis-dns-timeline';
+const VIS_DNS_TOP_DOMAINS  = 'xdr-tel-vis-dns-top-domains';
+const VIS_DNS_TOP_RESOLVERS = 'xdr-tel-vis-dns-top-resolvers';
+
+// Session / authentication visualizations
+const DASH_SESSION             = 'xdr-agent-telemetry-session';
+const NAV_SESSION              = 'xdr-tel-nav-session';
+const VIS_SESSION_EVENTS       = 'xdr-tel-vis-session-events';
+const VIS_SESSION_LOGINS       = 'xdr-tel-vis-session-logins';
+const VIS_SESSION_LOGOFFS      = 'xdr-tel-vis-session-logoffs';
+const VIS_SESSION_SSH_FAILED   = 'xdr-tel-vis-session-ssh-failed';
+const VIS_SESSION_ACTION_PIE   = 'xdr-tel-vis-session-action-pie';
+const VIS_SESSION_USERS_PIE    = 'xdr-tel-vis-session-users-pie';
+const VIS_SESSION_SUDO         = 'xdr-tel-vis-session-sudo';
+const VIS_SESSION_TIMELINE     = 'xdr-tel-vis-session-timeline';
+const VIS_SESSION_SRC_IPS      = 'xdr-tel-vis-session-src-ips';
+const VIS_SESSION_SUDO_TARGETS = 'xdr-tel-vis-session-sudo-targets';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const ss = (query = '') =>
@@ -314,6 +357,73 @@ const countAreaVis = (title: string, yTitle: string) =>
     ],
   });
 
+// Count-over-time area chart with a terms group-by split (e.g. FIM action)
+const countAreaGroupVis = (title: string, groupField: string, groupLabel: string, yTitle: string) =>
+  JSON.stringify({
+    title,
+    type: 'area',
+    params: {
+      type: 'area',
+      grid: { categoryLines: false, style: { color: '#eee' } },
+      categoryAxes: [{
+        id: 'CategoryAxis-1', type: 'category', position: 'bottom', show: true, style: {},
+        scale: { type: 'linear' }, labels: { show: true, truncate: 100, filter: true }, title: {},
+      }],
+      valueAxes: [{
+        id: 'ValueAxis-1', name: 'LeftAxis-1', type: 'value', position: 'left', show: true, style: {},
+        scale: { type: 'linear', mode: 'normal' }, labels: { show: true, rotate: 0, filter: false, truncate: 100 },
+        title: { text: yTitle },
+      }],
+      seriesParams: [{
+        show: true, type: 'area', mode: 'stacked',
+        data: { label: 'Count', id: '1' },
+        drawLinesBetweenPoints: true, showCircles: true, interpolate: 'linear', lineWidth: 2,
+        valueAxis: 'ValueAxis-1',
+      }],
+      addTooltip: true, addLegend: true, legendPosition: 'top',
+      times: [], addTimeMarker: false,
+    },
+    aggs: [
+      { id: '1', enabled: true, type: 'count', schema: 'metric', params: { customLabel: 'Count' } },
+      { id: '2', enabled: true, type: 'date_histogram', schema: 'segment',
+        params: { field: '@timestamp', interval: 'auto', min_doc_count: 1, extended_bounds: {} } },
+      { id: '3', enabled: true, type: 'terms', schema: 'group',
+        params: { field: groupField, size: 10, order: 'desc', orderBy: '1',
+          otherBucket: false, missingBucket: false, customLabel: groupLabel } },
+    ],
+  });
+
+// Top-N horizontal bar: count of events per term value (for directories, file paths, etc.)
+const topNTermsCountBarVis = (title: string, termField: string, termLabel: string, topN = 15) =>
+  JSON.stringify({
+    title,
+    type: 'horizontal_bar',
+    params: {
+      type: 'horizontal_bar',
+      grid: { categoryLines: false, style: { color: '#eee' } },
+      categoryAxes: [{
+        id: 'CategoryAxis-1', type: 'category', position: 'left', show: true, style: {},
+        scale: { type: 'linear' }, labels: { show: true, truncate: 300, filter: true }, title: {},
+      }],
+      valueAxes: [{
+        id: 'ValueAxis-1', name: 'BottomAxis-1', type: 'value', position: 'bottom', show: true, style: {},
+        scale: { type: 'linear', mode: 'normal' }, labels: { show: true, rotate: 0, filter: false, truncate: 100 },
+        title: { text: 'Events' },
+      }],
+      seriesParams: [{ show: true, type: 'histogram', mode: 'normal',
+        data: { label: 'Events', id: '1' }, valueAxis: 'ValueAxis-1' }],
+      addTooltip: true, addLegend: false, legendPosition: 'right',
+      times: [], addTimeMarker: false,
+    },
+    aggs: [
+      { id: '1', enabled: true, type: 'count', schema: 'metric', params: { customLabel: 'Events' } },
+      { id: '2', enabled: true, type: 'terms', schema: 'segment',
+        params: { field: termField, size: topN, order: 'desc', orderBy: '1',
+          otherBucket: true, otherBucketLabel: 'Other', missingBucket: false,
+          missingBucketLabel: 'Missing', customLabel: termLabel } },
+    ],
+  });
+
 // ── Saved Objects ───────────────────────────────────────────────────────────
 
 function vis(id: string, title: string, description: string, visState: string, query = '') {
@@ -377,11 +487,14 @@ function dashboard(
 }
 
 // ── Markdown tab navigation ─────────────────────────────────────────────────
-const navMd = (active: 'host' | 'process' | 'network') => {
-  const hostLabel = active === 'host' ? '**▸ Host**' : `[Host](/app/dashboards#/view/${DASH_HOST})`;
-  const procLabel = active === 'process' ? '**▸ Processes**' : `[Processes](/app/dashboards#/view/${DASH_PROCESS})`;
-  const netLabel = active === 'network' ? '**▸ Network**' : `[Network](/app/dashboards#/view/${DASH_NETWORK})`;
-  return `### XDR Agent Telemetry\n${hostLabel} &nbsp;&nbsp;|&nbsp;&nbsp; ${procLabel} &nbsp;&nbsp;|&nbsp;&nbsp; ${netLabel}`;
+const navMd = (active: 'host' | 'process' | 'network' | 'file' | 'dns' | 'session') => {
+  const hostLabel    = active === 'host'    ? '**▸ Host**'      : `[Host](/app/dashboards#/view/${DASH_HOST})`;
+  const procLabel    = active === 'process' ? '**▸ Processes**' : `[Processes](/app/dashboards#/view/${DASH_PROCESS})`;
+  const netLabel     = active === 'network' ? '**▸ Network**'   : `[Network](/app/dashboards#/view/${DASH_NETWORK})`;
+  const fileLabel    = active === 'file'    ? '**▸ Files**'     : `[Files](/app/dashboards#/view/${DASH_FILE})`;
+  const dnsLabel     = active === 'dns'     ? '**▸ DNS**'       : `[DNS](/app/dashboards#/view/${DASH_DNS})`;
+  const sessionLabel = active === 'session' ? '**▸ Sessions**'  : `[Sessions](/app/dashboards#/view/${DASH_SESSION})`;
+  return `### XDR Agent Telemetry\n${hostLabel} &nbsp;&nbsp;|&nbsp;&nbsp; ${procLabel} &nbsp;&nbsp;|&nbsp;&nbsp; ${netLabel} &nbsp;&nbsp;|&nbsp;&nbsp; ${fileLabel} &nbsp;&nbsp;|&nbsp;&nbsp; ${dnsLabel} &nbsp;&nbsp;|&nbsp;&nbsp; ${sessionLabel}`;
 };
 
 function buildSavedObjects() {
@@ -409,6 +522,18 @@ function buildSavedObjects() {
   const navNetwork = vis(NAV_NETWORK, '[XDR] Nav — Network',
     'Tab navigation (Network active)',
     markdownVis('[XDR] Nav — Network', navMd('network')));
+
+  const navFile = vis(NAV_FILE, '[XDR] Nav — Files',
+    'Tab navigation (Files active)',
+    markdownVis('[XDR] Nav — Files', navMd('file')));
+
+  const navDns = vis(NAV_DNS, '[XDR] Nav — DNS',
+    'Tab navigation (DNS active)',
+    markdownVis('[XDR] Nav — DNS', navMd('dns')));
+
+  const navSession = vis(NAV_SESSION, '[XDR] Nav — Sessions',
+    'Tab navigation (Sessions active)',
+    markdownVis('[XDR] Nav — Sessions', navMd('session')));
 
   // ═══════════════════════════════════════════════════════════════════════════
   // HOST visualizations
@@ -679,6 +804,61 @@ function buildSavedObjects() {
     'event.category: "network"');
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // FILE / FIM visualizations
+  // Fields: event.category="file", payload.fim.action, payload.file.*
+  // Actions: created | modified | attributes_modified | deleted
+  // ═══════════════════════════════════════════════════════════════════════════
+  const visFimEvents = vis(VIS_FIM_EVENTS,
+    '[XDR] FIM Events', 'Total count of file integrity monitoring events',
+    metricVis('[XDR] FIM Events', null, 'count', 'FIM Events'),
+    'event.category: "file"');
+
+  const visFimCreated = vis(VIS_FIM_CREATED,
+    '[XDR] Files Created', 'Count of file creation events',
+    metricVis('[XDR] Files Created', null, 'count', 'Created'),
+    'event.category: "file" and payload.fim.action: "created"');
+
+  const visFimModified = vis(VIS_FIM_MODIFIED,
+    '[XDR] Files Modified', 'Count of file modification events',
+    metricVis('[XDR] Files Modified', null, 'count', 'Modified'),
+    'event.category: "file" and payload.fim.action: "modified"');
+
+  const visFimDeleted = vis(VIS_FIM_DELETED,
+    '[XDR] Files Deleted', 'Count of file deletion events',
+    metricVis('[XDR] Files Deleted', null, 'count', 'Deleted'),
+    'event.category: "file" and payload.fim.action: "deleted"');
+
+  const visFimActionPie = vis(VIS_FIM_ACTION_PIE,
+    '[XDR] FIM Action Distribution', 'File events broken down by action type',
+    pieVis('[XDR] FIM Action Distribution', 'payload.fim.action', 'Action', 10),
+    'event.category: "file"');
+
+  const visFimFileTypes = vis(VIS_FIM_FILE_TYPES,
+    '[XDR] File Types', 'File events broken down by file type (file / dir / symlink)',
+    pieVis('[XDR] File Types', 'payload.file.type', 'File Type', 10),
+    'event.category: "file"');
+
+  const visFimByOwner = vis(VIS_FIM_BY_OWNER,
+    '[XDR] FIM Events by Owner', 'File events broken down by file owner (username)',
+    pieVis('[XDR] FIM Events by Owner', 'payload.file.owner', 'Owner', 15),
+    'event.category: "file"');
+
+  const visFimTimeline = vis(VIS_FIM_TIMELINE,
+    '[XDR] FIM Events Over Time', 'File integrity events over time, stacked by action',
+    countAreaGroupVis('[XDR] FIM Events Over Time', 'payload.fim.action', 'Action', 'Events'),
+    'event.category: "file"');
+
+  const visFimTopDirs = vis(VIS_FIM_TOP_DIRS,
+    '[XDR] Most Active Directories', 'Top 15 directories by FIM event count',
+    topNTermsCountBarVis('[XDR] Most Active Directories', 'payload.file.directory', 'Directory', 15),
+    'event.category: "file"');
+
+  const visFimTopFiles = vis(VIS_FIM_TOP_FILES,
+    '[XDR] Most Active Files', 'Top 15 files by FIM event count',
+    topNTermsCountBarVis('[XDR] Most Active Files', 'payload.file.path', 'File Path', 15),
+    'event.category: "file"');
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // DASHBOARDS
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -792,11 +972,246 @@ function buildSavedObjects() {
       { name: 'panel_7', id: VIS_NET_TIMELINE },
     ]);
 
+  // ── File / FIM Dashboard ──────────────────────────────────────────────────
+  // Layout (48 cols):
+  //   Row  0: nav (48, 5)
+  //   Row  5: fim-events (12, 8) | created (12, 8) | modified (12, 8) | deleted (12, 8)
+  //   Row 13: action-pie (16, 14) | file-types (16, 14) | by-owner (16, 14)
+  //   Row 27: fim-timeline (48, 14)
+  //   Row 41: top-dirs (24, 16) | top-files (24, 16)
+
+  const dashFile = dashboard(DASH_FILE, 'XDR Telemetry — Files',
+    'File Integrity Monitoring: change events, action breakdown, top paths, and owner analysis.', [
+      // Row 0 — navigation
+      { x: 0,  y: 0,  w: 48, h: 5,  ref: 'panel_0'  },
+      // Row 5 — summary metrics
+      { x: 0,  y: 5,  w: 12, h: 8,  ref: 'panel_1'  },
+      { x: 12, y: 5,  w: 12, h: 8,  ref: 'panel_2'  },
+      { x: 24, y: 5,  w: 12, h: 8,  ref: 'panel_3'  },
+      { x: 36, y: 5,  w: 12, h: 8,  ref: 'panel_4'  },
+      // Row 13 — pies
+      { x: 0,  y: 13, w: 16, h: 14, ref: 'panel_5'  },
+      { x: 16, y: 13, w: 16, h: 14, ref: 'panel_6'  },
+      { x: 32, y: 13, w: 16, h: 14, ref: 'panel_7'  },
+      // Row 27 — timeline
+      { x: 0,  y: 27, w: 48, h: 14, ref: 'panel_8'  },
+      // Row 41 — top dirs + top files
+      { x: 0,  y: 41, w: 24, h: 16, ref: 'panel_9'  },
+      { x: 24, y: 41, w: 24, h: 16, ref: 'panel_10' },
+    ], [
+      { name: 'panel_0',  id: NAV_FILE          },
+      { name: 'panel_1',  id: VIS_FIM_EVENTS    },
+      { name: 'panel_2',  id: VIS_FIM_CREATED   },
+      { name: 'panel_3',  id: VIS_FIM_MODIFIED  },
+      { name: 'panel_4',  id: VIS_FIM_DELETED   },
+      { name: 'panel_5',  id: VIS_FIM_ACTION_PIE },
+      { name: 'panel_6',  id: VIS_FIM_FILE_TYPES },
+      { name: 'panel_7',  id: VIS_FIM_BY_OWNER  },
+      { name: 'panel_8',  id: VIS_FIM_TIMELINE  },
+      { name: 'panel_9',  id: VIS_FIM_TOP_DIRS  },
+      { name: 'panel_10', id: VIS_FIM_TOP_FILES },
+    ]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DNS visualizations
+  // event.module: "telemetry.dns"
+  // payload.dns.type: "query" | "answer"
+  // payload.dns.question.{name,type,class}, payload.dns.response_code
+  // payload.process.name, payload.source.ip, payload.destination.ip
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const visDnsEvents = vis(VIS_DNS_EVENTS,
+    '[XDR] DNS Events', 'Total count of DNS query and answer events captured by the DNS collector',
+    metricVis('[XDR] DNS Events', null, 'count', 'DNS Events'),
+    'event.module: "telemetry.dns"');
+
+  const visDnsQueries = vis(VIS_DNS_QUERIES,
+    '[XDR] DNS Queries', 'Count of outgoing DNS query events (QR=0)',
+    metricVis('[XDR] DNS Queries', null, 'count', 'Queries'),
+    'event.module: "telemetry.dns" and payload.dns.type: "query"');
+
+  const visDnsAnswers = vis(VIS_DNS_ANSWERS,
+    '[XDR] DNS Answers', 'Count of received DNS answer events (QR=1)',
+    metricVis('[XDR] DNS Answers', null, 'count', 'Answers'),
+    'event.module: "telemetry.dns" and payload.dns.type: "answer"');
+
+  const visDnsNxdomain = vis(VIS_DNS_NXDOMAIN,
+    '[XDR] NXDOMAIN Responses', 'Count of NXDOMAIN responses — elevated counts may indicate DGA or C2 beacon traffic',
+    metricVis('[XDR] NXDOMAIN Responses', null, 'count', 'NXDOMAIN'),
+    'event.module: "telemetry.dns" and payload.dns.response_code: "NXDOMAIN"');
+
+  const visDnsQtypePie = vis(VIS_DNS_QTYPE_PIE,
+    '[XDR] Query Type Distribution', 'DNS query type breakdown: A, AAAA, CNAME, MX, TXT, SRV, PTR …',
+    pieVis('[XDR] Query Type Distribution', 'payload.dns.question.type', 'Query Type', 15),
+    'event.module: "telemetry.dns"');
+
+  const visDnsRcodePie = vis(VIS_DNS_RCODE_PIE,
+    '[XDR] Response Code Distribution', 'DNS response code breakdown: NOERROR, NXDOMAIN, SERVFAIL, REFUSED …',
+    pieVis('[XDR] Response Code Distribution', 'payload.dns.response_code', 'Response Code', 10),
+    'event.module: "telemetry.dns" and payload.dns.type: "answer"');
+
+  const visDnsTopProcs = vis(VIS_DNS_TOP_PROCS,
+    '[XDR] Top Requesting Processes', 'Which processes are generating the most DNS queries',
+    pieVis('[XDR] Top Requesting Processes', 'payload.process.name', 'Process', 15),
+    'event.module: "telemetry.dns" and payload.dns.type: "query"');
+
+  const visDnsTimeline = vis(VIS_DNS_TIMELINE,
+    '[XDR] DNS Events Over Time', 'DNS query and answer volume over time, stacked by type',
+    countAreaGroupVis('[XDR] DNS Events Over Time', 'payload.dns.type', 'Type', 'Events'),
+    'event.module: "telemetry.dns"');
+
+  const visDnsTopDomains = vis(VIS_DNS_TOP_DOMAINS,
+    '[XDR] Top Queried Domains', 'Top 20 queried domain names — high frequency or unusual names may indicate C2, DGA, or exfiltration',
+    topNTermsCountBarVis('[XDR] Top Queried Domains', 'payload.dns.question.name', 'Domain', 20),
+    'event.module: "telemetry.dns" and payload.dns.type: "query"');
+
+  const visDnsTopResolvers = vis(VIS_DNS_TOP_RESOLVERS,
+    '[XDR] Top DNS Resolvers', 'Top resolver destination IPs receiving queries from this host — unexpected IPs may indicate DNS hijacking',
+    topNTermsCountBarVis('[XDR] Top DNS Resolvers', 'payload.destination.ip', 'Resolver IP', 15),
+    'event.module: "telemetry.dns" and payload.dns.type: "query"');
+
+  // ── DNS Dashboard ─────────────────────────────────────────────────────────
+  // Layout (48 cols):
+  //   Row  0: nav (48, 5)
+  //   Row  5: dns-events (12, 8) | dns-queries (12, 8) | dns-answers (12, 8) | nxdomain (12, 8)
+  //   Row 13: qtype-pie (16, 14) | rcode-pie (16, 14) | top-procs-pie (16, 14)
+  //   Row 27: dns-timeline (48, 14)
+  //   Row 41: top-domains (24, 16) | top-resolvers (24, 16)
+
+  const dashDns = dashboard(DASH_DNS, 'XDR Telemetry — DNS',
+    'DNS query monitoring: query types, response codes, top queried domains, DNS resolvers, and requesting processes.', [
+      // Row 0 — navigation
+      { x: 0,  y: 0,  w: 48, h: 5,  ref: 'panel_0'  },
+      // Row 5 — summary metrics
+      { x: 0,  y: 5,  w: 12, h: 8,  ref: 'panel_1'  },
+      { x: 12, y: 5,  w: 12, h: 8,  ref: 'panel_2'  },
+      { x: 24, y: 5,  w: 12, h: 8,  ref: 'panel_3'  },
+      { x: 36, y: 5,  w: 12, h: 8,  ref: 'panel_4'  },
+      // Row 13 — pies
+      { x: 0,  y: 13, w: 16, h: 14, ref: 'panel_5'  },
+      { x: 16, y: 13, w: 16, h: 14, ref: 'panel_6'  },
+      { x: 32, y: 13, w: 16, h: 14, ref: 'panel_7'  },
+      // Row 27 — timeline
+      { x: 0,  y: 27, w: 48, h: 14, ref: 'panel_8'  },
+      // Row 41 — top-N bars
+      { x: 0,  y: 41, w: 24, h: 16, ref: 'panel_9'  },
+      { x: 24, y: 41, w: 24, h: 16, ref: 'panel_10' },
+    ], [
+      { name: 'panel_0',  id: NAV_DNS               },
+      { name: 'panel_1',  id: VIS_DNS_EVENTS         },
+      { name: 'panel_2',  id: VIS_DNS_QUERIES        },
+      { name: 'panel_3',  id: VIS_DNS_ANSWERS        },
+      { name: 'panel_4',  id: VIS_DNS_NXDOMAIN       },
+      { name: 'panel_5',  id: VIS_DNS_QTYPE_PIE      },
+      { name: 'panel_6',  id: VIS_DNS_RCODE_PIE      },
+      { name: 'panel_7',  id: VIS_DNS_TOP_PROCS      },
+      { name: 'panel_8',  id: VIS_DNS_TIMELINE       },
+      { name: 'panel_9',  id: VIS_DNS_TOP_DOMAINS    },
+      { name: 'panel_10', id: VIS_DNS_TOP_RESOLVERS  },
+    ]);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SESSION / AUTHENTICATION visualizations
+  // event.category: "authentication"
+  // payload.event.{action,outcome}, payload.user.{name,effective.name}
+  // payload.source.ip, payload.session.type
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const visSessionEvents = vis(VIS_SESSION_EVENTS,
+    '[XDR] Session Events', 'Total count of authentication and session events',
+    metricVis('[XDR] Session Events', null, 'count', 'Session Events'),
+    'event.category: "authentication"');
+
+  const visSessionLogins = vis(VIS_SESSION_LOGINS,
+    '[XDR] Logons', 'Count of successful user logon events detected via utmp (USER_PROCESS records)',
+    metricVis('[XDR] Logons', null, 'count', 'Logons'),
+    'event.category: "authentication" and payload.event.action: "logged-in"');
+
+  const visSessionLogoffs = vis(VIS_SESSION_LOGOFFS,
+    '[XDR] Logoffs', 'Count of user session end events detected via utmp (DEAD_PROCESS records)',
+    metricVis('[XDR] Logoffs', null, 'count', 'Logoffs'),
+    'event.category: "authentication" and payload.event.action: "logged-out"');
+
+  const visSessionSshFailed = vis(VIS_SESSION_SSH_FAILED,
+    '[XDR] SSH Failed Logins', 'Count of failed SSH authentication attempts — elevated counts indicate brute-force activity',
+    metricVis('[XDR] SSH Failed Logins', null, 'count', 'SSH Failed'),
+    'event.category: "authentication" and payload.event.action: "ssh-failed"');
+
+  const visSessionActionPie = vis(VIS_SESSION_ACTION_PIE,
+    '[XDR] Action Distribution', 'Session events broken down by action: logged-in, ssh-accepted, ssh-failed, sudo, su, logged-out',
+    pieVis('[XDR] Action Distribution', 'payload.event.action', 'Action', 10),
+    'event.category: "authentication"');
+
+  const visSessionUsersPie = vis(VIS_SESSION_USERS_PIE,
+    '[XDR] Sessions by User', 'Which users are generating the most authentication events',
+    pieVis('[XDR] Sessions by User', 'payload.user.name', 'User', 15),
+    'event.category: "authentication"');
+
+  const visSessionSudo = vis(VIS_SESSION_SUDO,
+    '[XDR] Sudo Executions', 'Count of sudo command executions captured from the auth log',
+    metricVis('[XDR] Sudo Executions', null, 'count', 'Sudo'),
+    'event.category: "authentication" and payload.event.action: "sudo"');
+
+  const visSessionTimeline = vis(VIS_SESSION_TIMELINE,
+    '[XDR] Session Events Over Time', 'Authentication and session events over time, stacked by action type',
+    countAreaGroupVis('[XDR] Session Events Over Time', 'payload.event.action', 'Action', 'Events'),
+    'event.category: "authentication"');
+
+  const visSessionSrcIps = vis(VIS_SESSION_SRC_IPS,
+    '[XDR] Top SSH Source IPs', 'Top remote IPs connecting via SSH — useful for identifying external access patterns and brute-force sources',
+    topNTermsCountBarVis('[XDR] Top SSH Source IPs', 'payload.source.ip', 'Source IP', 20),
+    'event.category: "authentication" and (payload.event.action: "ssh-accepted" or payload.event.action: "ssh-failed")');
+
+  const visSessionSudoTargets = vis(VIS_SESSION_SUDO_TARGETS,
+    '[XDR] Sudo Target Users', 'Top target users elevated to via sudo — root should dominate; unexpected users warrant investigation',
+    topNTermsCountBarVis('[XDR] Sudo Target Users', 'payload.user.effective.name', 'Target User', 15),
+    'event.category: "authentication" and payload.event.action: "sudo"');
+
+  // ── Session Dashboard ─────────────────────────────────────────────────────
+  // Layout (48 cols):
+  //   Row  0: nav (48, 5)
+  //   Row  5: session-events (12, 8) | logins (12, 8) | logoffs (12, 8) | ssh-failed (12, 8)
+  //   Row 13: action-pie (16, 14) | users-pie (16, 14) | sudo-count (16, 14)
+  //   Row 27: session-timeline (48, 14)
+  //   Row 41: top-src-ips (24, 16) | sudo-targets (24, 16)
+
+  const dashSession = dashboard(DASH_SESSION, 'XDR Telemetry — Sessions',
+    'User session and authentication monitoring: logons / logoffs, SSH activity, sudo commands, and privilege escalation.', [
+      // Row 0 — navigation
+      { x: 0,  y: 0,  w: 48, h: 5,  ref: 'panel_0'  },
+      // Row 5 — summary metrics
+      { x: 0,  y: 5,  w: 12, h: 8,  ref: 'panel_1'  },
+      { x: 12, y: 5,  w: 12, h: 8,  ref: 'panel_2'  },
+      { x: 24, y: 5,  w: 12, h: 8,  ref: 'panel_3'  },
+      { x: 36, y: 5,  w: 12, h: 8,  ref: 'panel_4'  },
+      // Row 13 — pies + sudo metric
+      { x: 0,  y: 13, w: 16, h: 14, ref: 'panel_5'  },
+      { x: 16, y: 13, w: 16, h: 14, ref: 'panel_6'  },
+      { x: 32, y: 13, w: 16, h: 14, ref: 'panel_7'  },
+      // Row 27 — timeline
+      { x: 0,  y: 27, w: 48, h: 14, ref: 'panel_8'  },
+      // Row 41 — top-N bars
+      { x: 0,  y: 41, w: 24, h: 16, ref: 'panel_9'  },
+      { x: 24, y: 41, w: 24, h: 16, ref: 'panel_10' },
+    ], [
+      { name: 'panel_0',  id: NAV_SESSION               },
+      { name: 'panel_1',  id: VIS_SESSION_EVENTS         },
+      { name: 'panel_2',  id: VIS_SESSION_LOGINS         },
+      { name: 'panel_3',  id: VIS_SESSION_LOGOFFS        },
+      { name: 'panel_4',  id: VIS_SESSION_SSH_FAILED     },
+      { name: 'panel_5',  id: VIS_SESSION_ACTION_PIE     },
+      { name: 'panel_6',  id: VIS_SESSION_USERS_PIE      },
+      { name: 'panel_7',  id: VIS_SESSION_SUDO           },
+      { name: 'panel_8',  id: VIS_SESSION_TIMELINE       },
+      { name: 'panel_9',  id: VIS_SESSION_SRC_IPS        },
+      { name: 'panel_10', id: VIS_SESSION_SUDO_TARGETS   },
+    ]);
+
   return {
     indexPatterns: [indexPattern],
     dashboardObjects: [
       // Navigation markdown
-      navHost, navProcess, navNetwork,
+      navHost, navProcess, navNetwork, navFile, navDns, navSession,
       // Host
       visHostEvents, visActiveAgents, visAvgMemory, visAvgCpu, visSwapGauge, visDiskGauge,
       visHostnameFilter, visCpuPerAgent, visMemTimeline, visCpuBreakdown, visDiskIO, visNetIO,
@@ -806,8 +1221,20 @@ function buildSavedObjects() {
       visProcThreads, visProcStatePie, visProcUserPie,
       // Network
       visNetEvents, visNetInbound, visNetOutbound, visNetProtocol, visNetState, visNetDirection, visNetTimeline,
+      // File / FIM
+      visFimEvents, visFimCreated, visFimModified, visFimDeleted,
+      visFimActionPie, visFimFileTypes, visFimByOwner,
+      visFimTimeline, visFimTopDirs, visFimTopFiles,
+      // DNS
+      visDnsEvents, visDnsQueries, visDnsAnswers, visDnsNxdomain,
+      visDnsQtypePie, visDnsRcodePie, visDnsTopProcs,
+      visDnsTimeline, visDnsTopDomains, visDnsTopResolvers,
+      // Session / Authentication
+      visSessionEvents, visSessionLogins, visSessionLogoffs, visSessionSshFailed,
+      visSessionActionPie, visSessionUsersPie, visSessionSudo,
+      visSessionTimeline, visSessionSrcIps, visSessionSudoTargets,
       // Dashboards
-      dashHost, dashProcess, dashNetwork,
+      dashHost, dashProcess, dashNetwork, dashFile, dashDns, dashSession,
     ],
   };
 }
@@ -846,7 +1273,7 @@ export async function installTelemetryDashboard(
     }
 
     logger.info(
-      `xdr_manager: installed telemetry dashboards (Host, Process, Network) — ${created} objects written`
+      `xdr_manager: installed telemetry dashboards (Host, Process, Network, Files, DNS, Sessions) — ${created} objects written`
     );
   } catch (err) {
     logger.error(`xdr_manager: failed to install telemetry dashboards: ${err}`);
