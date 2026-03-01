@@ -32,9 +32,14 @@ const VIS_HOST_EVENTS = 'xdr-tel-vis-host-events';
 const VIS_ACTIVE_AGENTS = 'xdr-tel-vis-active-agents';
 const VIS_AVG_MEMORY = 'xdr-tel-vis-avg-memory';
 const VIS_AVG_CPU = 'xdr-tel-vis-avg-cpu';
+const VIS_SWAP_GAUGE = 'xdr-tel-vis-swap-gauge';
+const VIS_DISK_GAUGE = 'xdr-tel-vis-disk-gauge';
 const VIS_HOSTNAME_FILTER = 'xdr-tel-vis-hostname-filter';
 const VIS_CPU_PER_AGENT = 'xdr-tel-vis-cpu-per-agent';
 const VIS_MEMORY_TIMELINE = 'xdr-tel-vis-memory-timeline';
+const VIS_CPU_BREAKDOWN = 'xdr-tel-vis-cpu-breakdown';
+const VIS_DISKIO = 'xdr-tel-vis-diskio';
+const VIS_NETIO = 'xdr-tel-vis-netio';
 
 // Process visualizations
 const VIS_PROCESS_EVENTS = 'xdr-tel-vis-process-events';
@@ -57,6 +62,52 @@ const ss = (query = '') =>
     index: INDEX_PATTERN_ID,
     query: { query, language: 'kuery' },
     filter: [],
+  });
+
+// Generic Arc gauge (green→yellow→red at standard thresholds)
+const gaugeVis = (title: string, field: string, label: string, ranges: Array<{ from: number; to: number }>) =>
+  JSON.stringify({
+    title,
+    type: 'gauge',
+    params: {
+      type: 'gauge', addTooltip: true, addLegend: true, isDisplayWarning: false,
+      gauge: {
+        verticalSplit: false, extendRange: true, percentageMode: false,
+        gaugeType: 'Arc', gaugeColorMode: 'Labels',
+        colorsRange: ranges,
+        invertColors: false,
+        labels: { show: true, color: 'black' },
+        scale: { show: true, labels: false, color: '#333' },
+        type: 'meter',
+        style: { bgWidth: 0.9, width: 0.9, mask: false, bgMask: false, maskBars: 50, bgFill: '#eee', bgColor: false, subText: '', fontSize: 60 },
+        minAngle: 0, maxAngle: 6.283, alignment: 'automatic',
+      },
+    },
+    aggs: [{ id: '1', enabled: true, type: 'avg', schema: 'metric', params: { field, customLabel: label } }],
+  });
+
+// Dual-series area chart (two average metrics over time, no group-by split)
+const dualAreaVis = (title: string, f1: string, l1: string, f2: string, l2: string, yTitle: string) =>
+  JSON.stringify({
+    title,
+    type: 'area',
+    params: {
+      type: 'area',
+      grid: { categoryLines: false, style: { color: '#eee' } },
+      categoryAxes: [{ id: 'CategoryAxis-1', type: 'category', position: 'bottom', show: true, style: {}, scale: { type: 'linear' }, labels: { show: true, truncate: 100, filter: true }, title: {} }],
+      valueAxes: [{ id: 'ValueAxis-1', name: 'LeftAxis-1', type: 'value', position: 'left', show: true, style: {}, scale: { type: 'linear', mode: 'normal' }, labels: { show: true, rotate: 0, filter: false, truncate: 100 }, title: { text: yTitle } }],
+      seriesParams: [
+        { show: true, type: 'area', mode: 'normal', data: { label: l1, id: '1' }, valueAxis: 'ValueAxis-1', drawLinesBetweenPoints: true, showCircles: true, interpolate: 'linear', lineWidth: 2 },
+        { show: true, type: 'area', mode: 'normal', data: { label: l2, id: '2' }, valueAxis: 'ValueAxis-1', drawLinesBetweenPoints: true, showCircles: true, interpolate: 'linear', lineWidth: 2 },
+      ],
+      addTooltip: true, addLegend: true, legendPosition: 'top',
+      times: [], addTimeMarker: false,
+    },
+    aggs: [
+      { id: '1', enabled: true, type: 'avg', schema: 'metric', params: { field: f1, customLabel: l1 } },
+      { id: '2', enabled: true, type: 'avg', schema: 'metric', params: { field: f2, customLabel: l2 } },
+      { id: '3', enabled: true, type: 'date_histogram', schema: 'segment', params: { field: '@timestamp', interval: 'auto', min_doc_count: 1, extended_bounds: {} } },
+    ],
   });
 
 const metricVis = (
@@ -292,61 +343,29 @@ function buildSavedObjects() {
   const visAvgMemory = vis(VIS_AVG_MEMORY,
     '[XDR] Avg Memory Used %',
     'Average memory used percentage across all agents',
-    JSON.stringify({
-      title: '[XDR] Avg Memory Used %',
-      type: 'gauge',
-      params: {
-        type: 'gauge', addTooltip: true, addLegend: true, isDisplayWarning: false,
-        gauge: {
-          verticalSplit: false, extendRange: true, percentageMode: false,
-          gaugeType: 'Arc', gaugeColorMode: 'Labels',
-          colorsRange: [{ from: 0, to: 50 }, { from: 50, to: 75 }, { from: 75, to: 100 }],
-          invertColors: false,
-          labels: { show: true, color: 'black' },
-          scale: { show: true, labels: false, color: '#333' },
-          type: 'meter',
-          style: {
-            bgWidth: 0.9, width: 0.9, mask: false, bgMask: false, maskBars: 50,
-            bgFill: '#eee', bgColor: false, subText: '', fontSize: 60,
-          },
-          minAngle: 0, maxAngle: 6.283, alignment: 'automatic',
-        },
-      },
-      aggs: [{
-        id: '1', enabled: true, type: 'avg', schema: 'metric',
-        params: { field: 'payload.system.memory.used.pct', customLabel: 'Avg Memory %' },
-      }],
-    }),
+    gaugeVis('[XDR] Avg Memory Used %', 'payload.system.memory.used.pct', 'Avg Memory %',
+      [{ from: 0, to: 50 }, { from: 50, to: 75 }, { from: 75, to: 100 }]),
     'event.category: "host"');
 
   const visAvgCpu = vis(VIS_AVG_CPU,
     '[XDR] Avg CPU Used %',
     'Average CPU used percentage across all agents',
-    JSON.stringify({
-      title: '[XDR] Avg CPU Used %',
-      type: 'gauge',
-      params: {
-        type: 'gauge', addTooltip: true, addLegend: true, isDisplayWarning: false,
-        gauge: {
-          verticalSplit: false, extendRange: true, percentageMode: false,
-          gaugeType: 'Arc', gaugeColorMode: 'Labels',
-          colorsRange: [{ from: 0, to: 50 }, { from: 50, to: 75 }, { from: 75, to: 100 }],
-          invertColors: false,
-          labels: { show: true, color: 'black' },
-          scale: { show: true, labels: false, color: '#333' },
-          type: 'meter',
-          style: {
-            bgWidth: 0.9, width: 0.9, mask: false, bgMask: false, maskBars: 50,
-            bgFill: '#eee', bgColor: false, subText: '', fontSize: 60,
-          },
-          minAngle: 0, maxAngle: 6.283, alignment: 'automatic',
-        },
-      },
-      aggs: [{
-        id: '1', enabled: true, type: 'avg', schema: 'metric',
-        params: { field: 'payload.system.cpu.total.pct', customLabel: 'Avg CPU %' },
-      }],
-    }),
+    gaugeVis('[XDR] Avg CPU Used %', 'payload.system.cpu.total.pct', 'Avg CPU %',
+      [{ from: 0, to: 50 }, { from: 50, to: 75 }, { from: 75, to: 100 }]),
+    'event.category: "host"');
+
+  const visSwapGauge = vis(VIS_SWAP_GAUGE,
+    '[XDR] Swap Used %',
+    'Average swap used percentage across all agents',
+    gaugeVis('[XDR] Swap Used %', 'payload.system.memory.swap.used.pct', 'Avg Swap %',
+      [{ from: 0, to: 50 }, { from: 50, to: 80 }, { from: 80, to: 100 }]),
+    'event.category: "host"');
+
+  const visDiskGauge = vis(VIS_DISK_GAUGE,
+    '[XDR] Disk Used % (root)',
+    'Average root filesystem used percentage across all agents',
+    gaugeVis('[XDR] Disk Used % (root)', 'payload.system.disk.root.used.pct', 'Disk %',
+      [{ from: 0, to: 70 }, { from: 70, to: 85 }, { from: 85, to: 100 }]),
     'event.category: "host"');
 
   const visHostnameFilter = {
@@ -398,6 +417,48 @@ function buildSavedObjects() {
     '[XDR] Memory Usage Over Time',
     'Memory used % over time, broken down by agent',
     areaVis('[XDR] Memory Usage Over Time', 'payload.system.memory.used.pct', 'Avg Memory %', 'agent.id', 'Memory Used %'),
+    'event.category: "host"');
+
+  const visCpuBreakdown = vis(VIS_CPU_BREAKDOWN,
+    '[XDR] CPU Breakdown',
+    'CPU time breakdown by mode: user, system, iowait, steal',
+    JSON.stringify({
+      title: '[XDR] CPU Breakdown',
+      type: 'area',
+      params: {
+        type: 'area',
+        grid: { categoryLines: false, style: { color: '#eee' } },
+        categoryAxes: [{ id: 'CategoryAxis-1', type: 'category', position: 'bottom', show: true, style: {}, scale: { type: 'linear' }, labels: { show: true, truncate: 100, filter: true }, title: {} }],
+        valueAxes: [{ id: 'ValueAxis-1', name: 'LeftAxis-1', type: 'value', position: 'left', show: true, style: {}, scale: { type: 'linear', mode: 'normal' }, labels: { show: true, rotate: 0, filter: false, truncate: 100 }, title: { text: 'CPU %' } }],
+        seriesParams: [
+          { show: true, type: 'area', mode: 'stacked', data: { label: 'User %', id: '1' }, valueAxis: 'ValueAxis-1', drawLinesBetweenPoints: true, showCircles: false, interpolate: 'linear', lineWidth: 1 },
+          { show: true, type: 'area', mode: 'stacked', data: { label: 'System %', id: '2' }, valueAxis: 'ValueAxis-1', drawLinesBetweenPoints: true, showCircles: false, interpolate: 'linear', lineWidth: 1 },
+          { show: true, type: 'area', mode: 'stacked', data: { label: 'IOWait %', id: '3' }, valueAxis: 'ValueAxis-1', drawLinesBetweenPoints: true, showCircles: false, interpolate: 'linear', lineWidth: 1 },
+          { show: true, type: 'area', mode: 'stacked', data: { label: 'Steal %', id: '4' }, valueAxis: 'ValueAxis-1', drawLinesBetweenPoints: true, showCircles: false, interpolate: 'linear', lineWidth: 1 },
+        ],
+        addTooltip: true, addLegend: true, legendPosition: 'top',
+        times: [], addTimeMarker: false,
+      },
+      aggs: [
+        { id: '1', enabled: true, type: 'avg', schema: 'metric', params: { field: 'payload.system.cpu.user.pct', customLabel: 'User %' } },
+        { id: '2', enabled: true, type: 'avg', schema: 'metric', params: { field: 'payload.system.cpu.system.pct', customLabel: 'System %' } },
+        { id: '3', enabled: true, type: 'avg', schema: 'metric', params: { field: 'payload.system.cpu.iowait.pct', customLabel: 'IOWait %' } },
+        { id: '4', enabled: true, type: 'avg', schema: 'metric', params: { field: 'payload.system.cpu.steal.pct', customLabel: 'Steal %' } },
+        { id: '5', enabled: true, type: 'date_histogram', schema: 'segment', params: { field: '@timestamp', interval: 'auto', min_doc_count: 1, extended_bounds: {} } },
+      ],
+    }),
+    'event.category: "host"');
+
+  const visDiskIO = vis(VIS_DISKIO,
+    '[XDR] Disk I/O',
+    'Disk read vs write bytes per collection interval',
+    dualAreaVis('[XDR] Disk I/O', 'payload.system.diskio.read.bytes', 'Read bytes', 'payload.system.diskio.write.bytes', 'Write bytes', 'Bytes / interval'),
+    'event.category: "host"');
+
+  const visNetIO = vis(VIS_NETIO,
+    '[XDR] Network I/O',
+    'Network inbound vs outbound bytes per collection interval',
+    dualAreaVis('[XDR] Network I/O', 'payload.system.netio.in.bytes', 'In bytes', 'payload.system.netio.out.bytes', 'Out bytes', 'Bytes / interval'),
     'event.category: "host"');
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -492,30 +553,42 @@ function buildSavedObjects() {
 
   // ── Host Dashboard ────────────────────────────────────────────────────────
   // Layout (48 cols):
-  //   Row 0:  nav (48 w, h=5)
-  //   Row 5:  hostname filter control (48 w, h=5)
-  //   Row 10: host-events (12) | active-agents (12) | avg-memory (12) | avg-cpu (12) — h=7
-  //   Row 17: cpu-per-agent (24, h=14) | memory-timeline (24, h=14)
+  //   Row 0:  nav (48, h=5)
+  //   Row 5:  hostname filter control (48, h=5)
+  //   Row 10: host-events (8) | active-agents (8) | avg-memory (8) | avg-cpu (8) | swap (8) | disk (8) — h=7
+  //   Row 17: cpu-per-agent (24, h=15) | memory-timeline (24, h=15)
+  //   Row 32: cpu-breakdown (24, h=14) | disk-io (24, h=14)
+  //   Row 46: network-io (48, h=14)
 
   const dashHost = dashboard(DASH_HOST, 'XDR Telemetry — Host',
-    'Host-level system metrics: CPU and memory over time, per agent.', [
+    'Host-level system metrics: CPU, memory, disk and network I/O.', [
       { x: 0,  y: 0,  w: 48, h: 5,  ref: 'panel_0' },
       { x: 0,  y: 5,  w: 48, h: 5,  ref: 'panel_6' },
-      { x: 0,  y: 10, w: 12, h: 7,  ref: 'panel_1' },
-      { x: 12, y: 10, w: 12, h: 7,  ref: 'panel_2' },
-      { x: 24, y: 10, w: 12, h: 7,  ref: 'panel_3' },
-      { x: 36, y: 10, w: 12, h: 7,  ref: 'panel_7' },
-      { x: 0,  y: 17, w: 24, h: 14, ref: 'panel_4' },
-      { x: 24, y: 17, w: 24, h: 14, ref: 'panel_5' },
+      { x: 0,  y: 10, w: 8,  h: 7,  ref: 'panel_1' },
+      { x: 8,  y: 10, w: 8,  h: 7,  ref: 'panel_2' },
+      { x: 16, y: 10, w: 8,  h: 7,  ref: 'panel_3' },
+      { x: 24, y: 10, w: 8,  h: 7,  ref: 'panel_7' },
+      { x: 32, y: 10, w: 8,  h: 7,  ref: 'panel_8' },
+      { x: 40, y: 10, w: 8,  h: 7,  ref: 'panel_9' },
+      { x: 0,  y: 17, w: 24, h: 15, ref: 'panel_4' },
+      { x: 24, y: 17, w: 24, h: 15, ref: 'panel_5' },
+      { x: 0,  y: 32, w: 24, h: 14, ref: 'panel_10' },
+      { x: 24, y: 32, w: 24, h: 14, ref: 'panel_11' },
+      { x: 0,  y: 46, w: 48, h: 14, ref: 'panel_12' },
     ], [
-      { name: 'panel_0', id: NAV_HOST },
-      { name: 'panel_1', id: VIS_HOST_EVENTS },
-      { name: 'panel_2', id: VIS_ACTIVE_AGENTS },
-      { name: 'panel_3', id: VIS_AVG_MEMORY },
-      { name: 'panel_4', id: VIS_CPU_PER_AGENT },
-      { name: 'panel_5', id: VIS_MEMORY_TIMELINE },
-      { name: 'panel_6', id: VIS_HOSTNAME_FILTER },
-      { name: 'panel_7', id: VIS_AVG_CPU },
+      { name: 'panel_0',  id: NAV_HOST },
+      { name: 'panel_1',  id: VIS_HOST_EVENTS },
+      { name: 'panel_2',  id: VIS_ACTIVE_AGENTS },
+      { name: 'panel_3',  id: VIS_AVG_MEMORY },
+      { name: 'panel_4',  id: VIS_CPU_PER_AGENT },
+      { name: 'panel_5',  id: VIS_MEMORY_TIMELINE },
+      { name: 'panel_6',  id: VIS_HOSTNAME_FILTER },
+      { name: 'panel_7',  id: VIS_AVG_CPU },
+      { name: 'panel_8',  id: VIS_SWAP_GAUGE },
+      { name: 'panel_9',  id: VIS_DISK_GAUGE },
+      { name: 'panel_10', id: VIS_CPU_BREAKDOWN },
+      { name: 'panel_11', id: VIS_DISKIO },
+      { name: 'panel_12', id: VIS_NETIO },
     ]);
 
   // ── Process Dashboard ─────────────────────────────────────────────────────
@@ -573,7 +646,8 @@ function buildSavedObjects() {
       // Navigation markdown
       navHost, navProcess, navNetwork,
       // Host
-      visHostEvents, visActiveAgents, visAvgMemory, visAvgCpu, visHostnameFilter, visCpuPerAgent, visMemTimeline,
+      visHostEvents, visActiveAgents, visAvgMemory, visAvgCpu, visSwapGauge, visDiskGauge,
+      visHostnameFilter, visCpuPerAgent, visMemTimeline, visCpuBreakdown, visDiskIO, visNetIO,
       // Process
       visProcessEvents, visUniqueProcs, visCpuPerProcess, visProcTimeline,
       // Network

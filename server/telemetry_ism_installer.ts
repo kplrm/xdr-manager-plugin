@@ -120,6 +120,7 @@ function buildIndexTemplate() {
                           used: {
                             properties: {
                               bytes: { type: 'long' },
+                              pct:   { type: 'float' },
                             },
                           },
                         },
@@ -128,37 +129,50 @@ function buildIndexTemplate() {
                   },
                   cpu: {
                     properties: {
-                      total: {
-                        properties: {
-                          pct: { type: 'float' },
-                        },
-                      },
-                      user: {
-                        properties: {
-                          pct: { type: 'float' },
-                        },
-                      },
-                      system: {
-                        properties: {
-                          pct: { type: 'float' },
-                        },
-                      },
-                      idle: {
-                        properties: {
-                          pct: { type: 'float' },
-                        },
-                      },
-                      iowait: {
-                        properties: {
-                          pct: { type: 'float' },
-                        },
-                      },
-                      steal: {
-                        properties: {
-                          pct: { type: 'float' },
-                        },
-                      },
+                      total: { properties: { pct: { type: 'float' } } },
+                      user: { properties: { pct: { type: 'float' } } },
+                      system: { properties: { pct: { type: 'float' } } },
+                      idle: { properties: { pct: { type: 'float' } } },
+                      iowait: { properties: { pct: { type: 'float' } } },
+                      steal: { properties: { pct: { type: 'float' } } },
                       cores: { type: 'integer' },
+                    },
+                  },
+                  diskio: {
+                    properties: {
+                      read:  { properties: { bytes: { type: 'long' }, ops: { type: 'long' } } },
+                      write: { properties: { bytes: { type: 'long' }, ops: { type: 'long' } } },
+                    },
+                  },
+                  netio: {
+                    properties: {
+                      in:  { properties: { bytes: { type: 'long' }, errors: { type: 'long' } } },
+                      out: { properties: { bytes: { type: 'long' }, errors: { type: 'long' } } },
+                    },
+                  },
+                  disk: {
+                    properties: {
+                      root: {
+                        properties: {
+                          total: { type: 'long' },
+                          free:  { type: 'long' },
+                          used:  { properties: { bytes: { type: 'long' }, pct: { type: 'float' } } },
+                        },
+                      },
+                      home: {
+                        properties: {
+                          total: { type: 'long' },
+                          free:  { type: 'long' },
+                          used:  { properties: { bytes: { type: 'long' }, pct: { type: 'float' } } },
+                        },
+                      },
+                      var: {
+                        properties: {
+                          total: { type: 'long' },
+                          free:  { type: 'long' },
+                          used:  { properties: { bytes: { type: 'long' }, pct: { type: 'float' } } },
+                        },
+                      },
                     },
                   },
                 },
