@@ -186,17 +186,46 @@ export interface TelemetryHostResponse {
 }
 
 export interface TelemetryProcessEntry {
+  // Core identity
   name: string;
   pid: number;
-  cpu_pct: number;
+  ppid: number;
   executable: string;
   command_line: string;
+  args: string[];
+  working_directory: string;
+  state: string;
+  entity_id: string;
+  // CPU (from process.cpu metric events)
+  cpu_pct: number;
+  // User / group context
+  user_id: number;
+  user_name: string;
+  group_id: number;
+  group_name: string;
+  // Security
+  cap_eff: string;
+  exe_sha256: string;
+  // Resource metrics
+  threads_count: number;
+  fd_count: number;
+  mem_rss_bytes: number;
+  mem_vms_bytes: number;
+  io_read_bytes: number;
+  io_write_bytes: number;
+  // Lineage
+  parent_pid: number;
+  parent_name: string;
+  // Event metadata
+  event_type: string;
   timestamp: string;
 }
 
 export interface TelemetryProcessResponse {
   processes: TelemetryProcessEntry[];
   total_events: number;
+  process_starts: number;
+  process_ends: number;
 }
 
 export interface TelemetryNetworkConnection {

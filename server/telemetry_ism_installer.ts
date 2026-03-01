@@ -179,18 +179,78 @@ function buildIndexTemplate() {
               },
               process: {
                 properties: {
-                  pid: { type: 'integer' },
-                  ppid: { type: 'integer' },
-                  name: { type: 'keyword' },
-                  executable: { type: 'keyword' },
-                  command_line: { type: 'keyword' },
+                  // ── Core identity ─────────────────────────────────────
+                  pid:               { type: 'integer' },
+                  ppid:              { type: 'integer' },
+                  name:              { type: 'keyword' },
+                  executable:        { type: 'keyword' },
+                  command_line:      { type: 'keyword' },
+                  args:              { type: 'keyword' },
+                  working_directory: { type: 'keyword' },
+                  entity_id:         { type: 'keyword' },
+                  state:             { type: 'keyword' },
+                  start_time:        { type: 'long' },
+                  // ── Session / terminal ────────────────────────────────
+                  session_id: { type: 'integer' },
+                  tty:        { type: 'integer' },
+                  // ── CPU % (embedded in process.start / process.end) ──
                   cpu: {
                     properties: {
                       pct: { type: 'float' },
                     },
                   },
-                  state: { type: 'keyword' },
-                  start_time: { type: 'date' },
+                  // ── User / group context ──────────────────────────────
+                  user: {
+                    properties: {
+                      id:   { type: 'integer' },
+                      name: { type: 'keyword' },
+                    },
+                  },
+                  group: {
+                    properties: {
+                      id:   { type: 'integer' },
+                      name: { type: 'keyword' },
+                    },
+                  },
+                  effective_user:  { properties: { id: { type: 'integer' } } },
+                  effective_group: { properties: { id: { type: 'integer' } } },
+                  // ── Security ──────────────────────────────────────────
+                  cap_eff: { type: 'keyword' },
+                  hash: {
+                    properties: {
+                      sha256: { type: 'keyword' },
+                    },
+                  },
+                  // ── Resource metrics ──────────────────────────────────
+                  threads: {
+                    properties: {
+                      count: { type: 'integer' },
+                    },
+                  },
+                  fd_count: { type: 'integer' },
+                  memory: {
+                    properties: {
+                      rss: { type: 'long' },
+                      vms: { type: 'long' },
+                    },
+                  },
+                  io: {
+                    properties: {
+                      read_bytes:  { type: 'long' },
+                      write_bytes: { type: 'long' },
+                    },
+                  },
+                  // ── Lineage ───────────────────────────────────────────
+                  parent: {
+                    properties: {
+                      pid:          { type: 'integer' },
+                      ppid:         { type: 'integer' },
+                      name:         { type: 'keyword' },
+                      executable:   { type: 'keyword' },
+                      command_line: { type: 'keyword' },
+                      entity_id:    { type: 'keyword' },
+                    },
+                  },
                 },
               },
               network: {

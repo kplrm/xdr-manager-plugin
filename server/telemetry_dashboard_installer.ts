@@ -42,10 +42,18 @@ const VIS_DISKIO = 'xdr-tel-vis-diskio';
 const VIS_NETIO = 'xdr-tel-vis-netio';
 
 // Process visualizations
-const VIS_PROCESS_EVENTS = 'xdr-tel-vis-process-events';
-const VIS_UNIQUE_PROCESSES = 'xdr-tel-vis-unique-processes';
-const VIS_CPU_PER_PROCESS = 'xdr-tel-vis-cpu-per-process';
-const VIS_PROCESS_TIMELINE = 'xdr-tel-vis-process-timeline';
+const VIS_PROCESS_EVENTS    = 'xdr-tel-vis-process-events';
+const VIS_UNIQUE_PROCESSES  = 'xdr-tel-vis-unique-processes';
+const VIS_CPU_PER_PROCESS   = 'xdr-tel-vis-cpu-per-process';
+const VIS_PROCESS_TIMELINE  = 'xdr-tel-vis-process-timeline';
+// Process visualizations — enriched lifecycle fields
+const VIS_PROC_STARTS       = 'xdr-tel-vis-proc-starts';
+const VIS_PROC_ENDS         = 'xdr-tel-vis-proc-ends';
+const VIS_PROC_MEM_RSS      = 'xdr-tel-vis-proc-mem-rss';
+const VIS_PROC_IO_RW        = 'xdr-tel-vis-proc-io-rw';
+const VIS_PROC_THREADS      = 'xdr-tel-vis-proc-threads';
+const VIS_PROC_STATE_PIE    = 'xdr-tel-vis-proc-state-pie';
+const VIS_PROC_USER_PIE     = 'xdr-tel-vis-proc-user-pie';
 
 // Network visualizations
 const VIS_NETWORK_EVENTS = 'xdr-tel-vis-network-events';
@@ -197,6 +205,81 @@ const pieVis = (title: string, termField: string, termLabel: string, topN = 10) 
         otherBucket: true, otherBucketLabel: 'Other', missingBucket: false, missingBucketLabel: 'Missing',
         customLabel: termLabel,
       }},
+    ],
+  });
+
+// Top-N horizontal bar — single metric field aggregated by process name
+const topNBarVis = (
+  title: string,
+  metricField: string,
+  metricLabel: string,
+  yTitle: string,
+  aggType: 'avg' | 'sum' = 'avg'
+) =>
+  JSON.stringify({
+    title,
+    type: 'horizontal_bar',
+    params: {
+      type: 'horizontal_bar',
+      grid: { categoryLines: false, style: { color: '#eee' } },
+      categoryAxes: [{
+        id: 'CategoryAxis-1', type: 'category', position: 'left', show: true, style: {},
+        scale: { type: 'linear' }, labels: { show: true, truncate: 200, filter: true }, title: {},
+      }],
+      valueAxes: [{
+        id: 'ValueAxis-1', name: 'BottomAxis-1', type: 'value', position: 'bottom', show: true, style: {},
+        scale: { type: 'linear', mode: 'normal' }, labels: { show: true, rotate: 0, filter: false, truncate: 100 },
+        title: { text: yTitle },
+      }],
+      seriesParams: [{ show: true, type: 'histogram', mode: 'normal',
+        data: { label: metricLabel, id: '1' }, valueAxis: 'ValueAxis-1' }],
+      addTooltip: true, addLegend: true, legendPosition: 'right',
+      times: [], addTimeMarker: false,
+    },
+    aggs: [
+      { id: '1', enabled: true, type: aggType, schema: 'metric',
+        params: { field: metricField, customLabel: metricLabel } },
+      { id: '2', enabled: true, type: 'terms', schema: 'segment',
+        params: { field: 'payload.process.name', size: 20, order: 'desc', orderBy: '1',
+          otherBucket: false, missingBucket: false, customLabel: 'Process' } },
+    ],
+  });
+
+// Dual-series horizontal bar (two sum metrics stacked, bucketed by process name)
+const dualTopNBarVis = (
+  title: string,
+  f1: string, l1: string,
+  f2: string, l2: string,
+  yTitle: string
+) =>
+  JSON.stringify({
+    title,
+    type: 'horizontal_bar',
+    params: {
+      type: 'horizontal_bar',
+      grid: { categoryLines: false, style: { color: '#eee' } },
+      categoryAxes: [{
+        id: 'CategoryAxis-1', type: 'category', position: 'left', show: true, style: {},
+        scale: { type: 'linear' }, labels: { show: true, truncate: 200, filter: true }, title: {},
+      }],
+      valueAxes: [{
+        id: 'ValueAxis-1', name: 'BottomAxis-1', type: 'value', position: 'bottom', show: true, style: {},
+        scale: { type: 'linear', mode: 'normal' }, labels: { show: true, rotate: 0, filter: false, truncate: 100 },
+        title: { text: yTitle },
+      }],
+      seriesParams: [
+        { show: true, type: 'histogram', mode: 'stacked', data: { label: l1, id: '1' }, valueAxis: 'ValueAxis-1' },
+        { show: true, type: 'histogram', mode: 'stacked', data: { label: l2, id: '2' }, valueAxis: 'ValueAxis-1' },
+      ],
+      addTooltip: true, addLegend: true, legendPosition: 'right',
+      times: [], addTimeMarker: false,
+    },
+    aggs: [
+      { id: '1', enabled: true, type: 'sum', schema: 'metric', params: { field: f1, customLabel: l1 } },
+      { id: '2', enabled: true, type: 'sum', schema: 'metric', params: { field: f2, customLabel: l2 } },
+      { id: '3', enabled: true, type: 'terms', schema: 'segment',
+        params: { field: 'payload.process.name', size: 20, order: 'desc', orderBy: '1',
+          otherBucket: false, missingBucket: false, customLabel: 'Process' } },
     ],
   });
 
@@ -509,6 +592,54 @@ function buildSavedObjects() {
     countAreaVis('[XDR] Process Events Over Time', 'Events'),
     'event.category: "process"');
 
+  // ── PROCESS visualizations — enriched lifecycle fields ──────────────────
+  const visProcStarts = vis(VIS_PROC_STARTS,
+    '[XDR] Process Starts',
+    'Count of process.start events in the selected time range',
+    metricVis('[XDR] Process Starts', null, 'count', 'Process Starts'),
+    'event.category: "process" and event.type: "process.start"');
+
+  const visProcEnds = vis(VIS_PROC_ENDS,
+    '[XDR] Process Exits',
+    'Count of process.end events in the selected time range',
+    metricVis('[XDR] Process Exits', null, 'count', 'Process Exits'),
+    'event.category: "process" and event.type: "process.end"');
+
+  const visProcMemRss = vis(VIS_PROC_MEM_RSS,
+    '[XDR] RSS Memory per Process',
+    'Average resident-set-size (RSS) memory per process — top 20',
+    topNBarVis('[XDR] RSS Memory per Process',
+      'payload.process.memory.rss', 'Avg RSS (bytes)', 'Bytes', 'avg'),
+    'event.category: "process" and event.type: "process.start"');
+
+  const visProcIoRw = vis(VIS_PROC_IO_RW,
+    '[XDR] I/O Bytes per Process (Read + Write)',
+    'Cumulative I/O read and write bytes to disk per process — top 20 by read',
+    dualTopNBarVis('[XDR] I/O Bytes per Process',
+      'payload.process.io.read_bytes',  'Read Bytes',
+      'payload.process.io.write_bytes', 'Write Bytes',
+      'Bytes'),
+    'event.category: "process" and event.type: "process.start"');
+
+  const visProcThreads = vis(VIS_PROC_THREADS,
+    '[XDR] Thread Count per Process',
+    'Average thread count per process — top 20',
+    topNBarVis('[XDR] Thread Count per Process',
+      'payload.process.threads.count', 'Avg Threads', 'Threads', 'avg'),
+    'event.category: "process" and event.type: "process.start"');
+
+  const visProcStatePie = vis(VIS_PROC_STATE_PIE,
+    '[XDR] Process State Distribution',
+    'Breakdown of process states: R (Running), S (Sleeping), D (Disk Wait), Z (Zombie), T (Stopped)',
+    pieVis('[XDR] Process State Distribution', 'payload.process.state', 'State', 10),
+    'event.category: "process" and event.type: "process.start"');
+
+  const visProcUserPie = vis(VIS_PROC_USER_PIE,
+    '[XDR] Processes by User',
+    'Which users are running the most processes',
+    pieVis('[XDR] Processes by User', 'payload.process.user.id', 'User', 15),
+    'event.category: "process" and event.type: "process.start"');
+
   // ═══════════════════════════════════════════════════════════════════════════
   // NETWORK visualizations
   // ═══════════════════════════════════════════════════════════════════════════
@@ -592,24 +723,45 @@ function buildSavedObjects() {
     ]);
 
   // ── Process Dashboard ─────────────────────────────────────────────────────
-  // Layout:
-  //   Row 0:  nav (48, 5)
-  //   Row 5:  process-events (24, 8) | unique-processes (24, 8)
-  //   Row 13: cpu-per-process (24, 16) | process-timeline (24, 16)
+  // Layout (48 cols):
+  //   Row  0: nav (48, 5)
+  //   Row  5: proc-events (12,8) | unique-procs (12,8) | proc-starts (12,8) | proc-ends (12,8)
+  //   Row 13: cpu-per-process (24,16) | process-timeline (24,16)
+  //   Row 29: mem-rss-per-proc (24,16) | io-per-proc (24,16)
+  //   Row 45: threads-per-proc (16,14) | user-pie (16,14) | state-pie (16,14)
 
   const dashProcess = dashboard(DASH_PROCESS, 'XDR Telemetry — Processes',
-    'Per-process CPU telemetry: top consumers, trends over time.', [
-      { x: 0,  y: 0,  w: 48, h: 5,  ref: 'panel_0' },
-      { x: 0,  y: 5,  w: 24, h: 8,  ref: 'panel_1' },
-      { x: 24, y: 5,  w: 24, h: 8,  ref: 'panel_2' },
-      { x: 0,  y: 13, w: 24, h: 16, ref: 'panel_3' },
-      { x: 24, y: 13, w: 24, h: 16, ref: 'panel_4' },
+    'Per-process telemetry: CPU, memory, I/O, threads, users, and state distribution.', [
+      // Row 0 — navigation
+      { x: 0,  y: 0,  w: 48, h: 5,  ref: 'panel_0'  },
+      // Row 5 — summary metrics
+      { x: 0,  y: 5,  w: 12, h: 8,  ref: 'panel_1'  },
+      { x: 12, y: 5,  w: 12, h: 8,  ref: 'panel_2'  },
+      { x: 24, y: 5,  w: 12, h: 8,  ref: 'panel_3'  },
+      { x: 36, y: 5,  w: 12, h: 8,  ref: 'panel_4'  },
+      // Row 13 — CPU bar + event timeline
+      { x: 0,  y: 13, w: 24, h: 16, ref: 'panel_5'  },
+      { x: 24, y: 13, w: 24, h: 16, ref: 'panel_6'  },
+      // Row 29 — memory RSS + I/O
+      { x: 0,  y: 29, w: 24, h: 16, ref: 'panel_7'  },
+      { x: 24, y: 29, w: 24, h: 16, ref: 'panel_8'  },
+      // Row 45 — threads + user pie + state pie
+      { x: 0,  y: 45, w: 16, h: 14, ref: 'panel_9'  },
+      { x: 16, y: 45, w: 16, h: 14, ref: 'panel_10' },
+      { x: 32, y: 45, w: 16, h: 14, ref: 'panel_11' },
     ], [
-      { name: 'panel_0', id: NAV_PROCESS },
-      { name: 'panel_1', id: VIS_PROCESS_EVENTS },
-      { name: 'panel_2', id: VIS_UNIQUE_PROCESSES },
-      { name: 'panel_3', id: VIS_CPU_PER_PROCESS },
-      { name: 'panel_4', id: VIS_PROCESS_TIMELINE },
+      { name: 'panel_0',  id: NAV_PROCESS          },
+      { name: 'panel_1',  id: VIS_PROCESS_EVENTS   },
+      { name: 'panel_2',  id: VIS_UNIQUE_PROCESSES },
+      { name: 'panel_3',  id: VIS_PROC_STARTS      },
+      { name: 'panel_4',  id: VIS_PROC_ENDS        },
+      { name: 'panel_5',  id: VIS_CPU_PER_PROCESS  },
+      { name: 'panel_6',  id: VIS_PROCESS_TIMELINE },
+      { name: 'panel_7',  id: VIS_PROC_MEM_RSS     },
+      { name: 'panel_8',  id: VIS_PROC_IO_RW       },
+      { name: 'panel_9',  id: VIS_PROC_THREADS     },
+      { name: 'panel_10', id: VIS_PROC_USER_PIE    },
+      { name: 'panel_11', id: VIS_PROC_STATE_PIE   },
     ]);
 
   // ── Network Dashboard ─────────────────────────────────────────────────────
@@ -650,6 +802,8 @@ function buildSavedObjects() {
       visHostnameFilter, visCpuPerAgent, visMemTimeline, visCpuBreakdown, visDiskIO, visNetIO,
       // Process
       visProcessEvents, visUniqueProcs, visCpuPerProcess, visProcTimeline,
+      visProcStarts, visProcEnds, visProcMemRss, visProcIoRw,
+      visProcThreads, visProcStatePie, visProcUserPie,
       // Network
       visNetEvents, visNetInbound, visNetOutbound, visNetProtocol, visNetState, visNetDirection, visNetTimeline,
       // Dashboards

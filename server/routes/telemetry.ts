@@ -146,23 +146,68 @@ export function defineTelemetryRoutes(router: IRouter, logger: Logger): void {
         const total_events =
           typeof totalHits === 'number' ? totalHits : totalHits?.value ?? 0;
 
-        // Deduplicate: keep the most recent reading per process name
+        // Deduplicate by process name; keep most-recent hit per name, merging
+        // zero/empty fields from older hits.  All enriched fields including
+        // cpu.pct are now present directly on process.start and process.end
+        // events — there is no separate process.cpu event type.
         const byName = new Map<string, TelemetryProcessEntry>();
+        let processStarts = 0;
+        let processEnds = 0;
+
         for (const hit of hits) {
           const src = hit._source;
           const proc = src?.payload?.process;
           if (!proc) continue;
 
-          const name = proc.name ?? 'unknown';
+          const eventType: string = src['event.type'] ?? '';
+          if (eventType === 'process.start') processStarts++;
+          else if (eventType === 'process.end') processEnds++;
+
+          const name: string = proc.name ?? 'unknown';
           if (!byName.has(name)) {
             byName.set(name, {
               name,
-              pid: proc.pid ?? 0,
-              cpu_pct: proc.cpu?.pct ?? 0,
-              executable: proc.executable ?? '',
-              command_line: proc.command_line ?? '',
-              timestamp: src['@timestamp'],
+              pid:               proc.pid              ?? 0,
+              ppid:              proc.ppid             ?? 0,
+              cpu_pct:           proc.cpu?.pct         ?? 0,
+              executable:        proc.executable       ?? '',
+              command_line:      proc.command_line     ?? '',
+              args:              Array.isArray(proc.args) ? proc.args : [],
+              working_directory: proc.working_directory ?? '',
+              state:             proc.state            ?? '',
+              entity_id:         proc.entity_id        ?? '',
+              user_id:           proc.user?.id         ?? 0,
+              user_name:         proc.user?.name       ?? '',
+              group_id:          proc.group?.id        ?? 0,
+              group_name:        proc.group?.name      ?? '',
+              cap_eff:           proc.cap_eff          ?? '',
+              exe_sha256:        proc.hash?.sha256     ?? '',
+              threads_count:     proc.threads?.count   ?? 0,
+              fd_count:          proc.fd_count         ?? 0,
+              mem_rss_bytes:     proc.memory?.rss      ?? 0,
+              mem_vms_bytes:     proc.memory?.vms      ?? 0,
+              io_read_bytes:     proc.io?.read_bytes   ?? 0,
+              io_write_bytes:    proc.io?.write_bytes  ?? 0,
+              parent_pid:        proc.parent?.pid      ?? 0,
+              parent_name:       proc.parent?.name     ?? '',
+              event_type:        eventType,
+              timestamp:         src['@timestamp'],
             });
+          } else {
+            // Merge: fill in zero/empty fields from older hits of the same process
+            const e = byName.get(name)!;
+            if (e.cpu_pct === 0 && (proc.cpu?.pct ?? 0) > 0)           e.cpu_pct           = proc.cpu.pct;
+            if (!e.user_name    && proc.user?.name)                    e.user_name          = proc.user.name;
+            if (!e.group_name   && proc.group?.name)                   e.group_name         = proc.group.name;
+            if (e.mem_rss_bytes   === 0 && (proc.memory?.rss ?? 0) > 0)  e.mem_rss_bytes   = proc.memory.rss;
+            if (e.mem_vms_bytes   === 0 && (proc.memory?.vms ?? 0) > 0)  e.mem_vms_bytes   = proc.memory.vms;
+            if (e.io_read_bytes   === 0 && (proc.io?.read_bytes  ?? 0) > 0) e.io_read_bytes  = proc.io.read_bytes;
+            if (e.io_write_bytes  === 0 && (proc.io?.write_bytes ?? 0) > 0) e.io_write_bytes = proc.io.write_bytes;
+            if (!e.exe_sha256    && proc.hash?.sha256)                 e.exe_sha256         = proc.hash.sha256;
+            if (!e.state         && proc.state)                        e.state              = proc.state;
+            if (!e.working_directory && proc.working_directory)        e.working_directory  = proc.working_directory;
+            if (e.threads_count === 0 && (proc.threads?.count ?? 0) > 0) e.threads_count   = proc.threads.count;
+            if (e.fd_count      === 0 && (proc.fd_count ?? 0) > 0)    e.fd_count           = proc.fd_count;
           }
         }
 
@@ -170,7 +215,12 @@ export function defineTelemetryRoutes(router: IRouter, logger: Logger): void {
           (a, b) => b.cpu_pct - a.cpu_pct
         );
 
-        const body: TelemetryProcessResponse = { processes, total_events };
+        const body: TelemetryProcessResponse = {
+          processes,
+          total_events,
+          process_starts: processStarts,
+          process_ends: processEnds,
+        };
         return response.ok({ body });
       } catch (err: any) {
         if (err?.statusCode === 404 || err?.meta?.statusCode === 404) {
