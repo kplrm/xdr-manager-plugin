@@ -70,7 +70,7 @@ const gaugeVis = (title: string, field: string, label: string, ranges: Array<{ f
     title,
     type: 'gauge',
     params: {
-      type: 'gauge', addTooltip: true, addLegend: true, isDisplayWarning: false,
+      type: 'gauge', addTooltip: true, addLegend: false, isDisplayWarning: false,
       gauge: {
         verticalSplit: false, extendRange: true, percentageMode: false,
         gaugeType: 'Arc', gaugeColorMode: 'Labels',
@@ -554,27 +554,27 @@ function buildSavedObjects() {
   // ── Host Dashboard ────────────────────────────────────────────────────────
   // Layout (48 cols):
   //   Row 0:  nav (48, h=5)
-  //   Row 5:  hostname filter control (48, h=5)
-  //   Row 10: host-events (8) | active-agents (8) | avg-memory (8) | avg-cpu (8) | swap (8) | disk (8) — h=7
-  //   Row 17: cpu-per-agent (24, h=15) | memory-timeline (24, h=15)
-  //   Row 32: cpu-breakdown (24, h=14) | disk-io (24, h=14)
-  //   Row 46: network-io (48, h=14)
+  //   Row 5:  filter (24, h=8) | host-events (12, h=8) | active-agents (12, h=8)
+  //   Row 13: avg-memory (12, h=15) | avg-cpu (12, h=15) | swap (12, h=15) | disk (12, h=15)
+  //   Row 28: cpu-per-agent (24, h=15) | memory-timeline (24, h=15)
+  //   Row 43: cpu-breakdown (24, h=14) | disk-io (24, h=14)
+  //   Row 57: network-io (48, h=14)
 
   const dashHost = dashboard(DASH_HOST, 'XDR Telemetry — Host',
     'Host-level system metrics: CPU, memory, disk and network I/O.', [
       { x: 0,  y: 0,  w: 48, h: 5,  ref: 'panel_0' },
-      { x: 0,  y: 5,  w: 48, h: 5,  ref: 'panel_6' },
-      { x: 0,  y: 10, w: 8,  h: 7,  ref: 'panel_1' },
-      { x: 8,  y: 10, w: 8,  h: 7,  ref: 'panel_2' },
-      { x: 16, y: 10, w: 8,  h: 7,  ref: 'panel_3' },
-      { x: 24, y: 10, w: 8,  h: 7,  ref: 'panel_7' },
-      { x: 32, y: 10, w: 8,  h: 7,  ref: 'panel_8' },
-      { x: 40, y: 10, w: 8,  h: 7,  ref: 'panel_9' },
-      { x: 0,  y: 17, w: 24, h: 15, ref: 'panel_4' },
-      { x: 24, y: 17, w: 24, h: 15, ref: 'panel_5' },
-      { x: 0,  y: 32, w: 24, h: 14, ref: 'panel_10' },
-      { x: 24, y: 32, w: 24, h: 14, ref: 'panel_11' },
-      { x: 0,  y: 46, w: 48, h: 14, ref: 'panel_12' },
+      { x: 0,  y: 5,  w: 24, h: 8,  ref: 'panel_6' },
+      { x: 24, y: 5,  w: 12, h: 8,  ref: 'panel_1' },
+      { x: 36, y: 5,  w: 12, h: 8,  ref: 'panel_2' },
+      { x: 0,  y: 13, w: 12, h: 10, ref: 'panel_3' },
+      { x: 12, y: 13, w: 12, h: 10, ref: 'panel_7' },
+      { x: 24, y: 13, w: 12, h: 10, ref: 'panel_8' },
+      { x: 36, y: 13, w: 12, h: 10, ref: 'panel_9' },
+      { x: 0,  y: 28, w: 24, h: 14, ref: 'panel_4' },
+      { x: 24, y: 28, w: 24, h: 14, ref: 'panel_5' },
+      { x: 0,  y: 43, w: 24, h: 14, ref: 'panel_10' },
+      { x: 24, y: 43, w: 24, h: 14, ref: 'panel_11' },
+      { x: 0,  y: 57, w: 48, h: 14, ref: 'panel_12' },
     ], [
       { name: 'panel_0',  id: NAV_HOST },
       { name: 'panel_1',  id: VIS_HOST_EVENTS },
