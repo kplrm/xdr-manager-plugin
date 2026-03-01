@@ -143,3 +143,82 @@ export interface ControlPlaneTelemetryResponse {
   indexed: number;
   message: string;
 }
+
+// ── Telemetry dashboard query responses ────────────────────────────────────
+
+export interface TelemetryHostMetrics {
+  cpu: {
+    cores: number;
+    total_pct: number;
+    user_pct: number;
+    system_pct: number;
+    idle_pct: number;
+    iowait_pct: number;
+    steal_pct: number;
+  };
+  memory: {
+    total: number;
+    used_bytes: number;
+    used_pct: number;
+    free: number;
+    actual_free: number;
+    cached: number;
+    buffer: number;
+    swap_total: number;
+    swap_free: number;
+    swap_used_bytes: number;
+  };
+  timestamp: string;
+}
+
+export interface TelemetryHostTimelinePoint {
+  timestamp: string;
+  cpu_total_pct: number;
+  cpu_user_pct: number;
+  cpu_system_pct: number;
+  cpu_iowait_pct: number;
+  memory_used_pct: number;
+}
+
+export interface TelemetryHostResponse {
+  latest: TelemetryHostMetrics | null;
+  timeline: TelemetryHostTimelinePoint[];
+}
+
+export interface TelemetryProcessEntry {
+  name: string;
+  pid: number;
+  cpu_pct: number;
+  executable: string;
+  command_line: string;
+  timestamp: string;
+}
+
+export interface TelemetryProcessResponse {
+  processes: TelemetryProcessEntry[];
+  total_events: number;
+}
+
+export interface TelemetryNetworkConnection {
+  direction: string;
+  local_addr: string;
+  local_port: number;
+  remote_addr: string;
+  remote_port: number;
+  protocol: string;
+  state: string;
+  transport: string;
+  timestamp: string;
+  event_type: string;
+}
+
+export interface TelemetryNetworkResponse {
+  connections: TelemetryNetworkConnection[];
+  summary: {
+    total: number;
+    inbound: number;
+    outbound: number;
+  };
+  protocols: Record<string, number>;
+  states: Record<string, number>;
+}

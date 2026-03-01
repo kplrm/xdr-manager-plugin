@@ -7,6 +7,11 @@ export class XdrManagerPlugin implements Plugin<XdrManagerPluginSetup, XdrManage
     core.application.register({
       id: PLUGIN_ID,
       title: PLUGIN_NAME,
+      category: {
+        id: 'opensearch',
+        label: 'OpenSearch Plugins',
+        order: 2000,
+      },
       async mount(params: AppMountParameters) {
         const { renderApp } = await import('./application');
         const [coreStart] = await core.getStartServices();

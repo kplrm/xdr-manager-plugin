@@ -34,6 +34,7 @@ import {
 import { i18n } from '@osd/i18n';
 import { BrowserRouter as Router } from 'react-router-dom';
 import { CoreStart } from '../../../../src/core/public';
+import { TelemetryDashboard } from './telemetry/telemetry_dashboard';
 import {
   EnrollmentTokenStatusResponse,
   GenerateEnrollmentTokenResponse,
@@ -127,7 +128,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
   const [policyAutoUpgrade, setPolicyAutoUpgrade] = useState(false);
   const [policyOsqueryEnabled, setPolicyOsqueryEnabled] = useState(false);
   const [isSavingPolicy, setIsSavingPolicy] = useState(false);
-  const [activeTab, setActiveTab] = useState<'agents' | 'policies'>('agents');
+  const [activeTab, setActiveTab] = useState<'agents' | 'policies' | 'telemetry'>('agents');
 
   const [agentSearchQuery, setAgentSearchQuery] = useState('');
   const [agentPageSize, setAgentPageSize] = useState(10);
@@ -569,11 +570,11 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
       <EuiButton fill onClick={() => setIsEnrollFlyoutOpen(true)} key="enroll">
         {i18n.translate('xdrManager.enrollButton', { defaultMessage: 'Enroll XDR' })}
       </EuiButton>
-    ) : (
+    ) : activeTab === 'policies' ? (
       <EuiButton fill onClick={openCreatePolicyFlyout} key="createPolicy">
         {i18n.translate('xdrManager.createPolicy', { defaultMessage: 'Create policy' })}
       </EuiButton>
-    );
+    ) : null;
 
   return (
     <Router basename={basename}>
@@ -581,7 +582,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
         <EuiPageBody component="main">
           <EuiPageHeader
             pageTitle={i18n.translate('xdrManager.pageTitle', { defaultMessage: 'XDR Manager' })}
-            rightSideItems={[headerAction]}
+            rightSideItems={headerAction ? [headerAction] : []}
           />
 
           <EuiCallOut
@@ -606,6 +607,9 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
             </EuiTab>
             <EuiTab onClick={() => setActiveTab('policies')} isSelected={activeTab === 'policies'}>
               {i18n.translate('xdrManager.tabPolicies', { defaultMessage: 'Policy management' })}
+            </EuiTab>
+            <EuiTab onClick={() => setActiveTab('telemetry')} isSelected={activeTab === 'telemetry'}>
+              {i18n.translate('xdrManager.tabTelemetry', { defaultMessage: 'Telemetry' })}
             </EuiTab>
           </EuiTabs>
 
@@ -736,6 +740,10 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                 </EuiFlexItem>
               </EuiFlexGroup>
             </EuiPanel>
+          )}
+
+          {activeTab === 'telemetry' && (
+            <TelemetryDashboard http={http} notifications={notifications} />
           )}
 
           {isEnrollFlyoutOpen && (

@@ -21,6 +21,7 @@ import {
   XdrPolicy,
   XDR_AGENT_SAVED_OBJECT_TYPE,
 } from '../../common';
+import { defineTelemetryRoutes } from './telemetry';
 
 const policies: XdrPolicy[] = [
   {
@@ -699,100 +700,12 @@ export function defineRoutes(
       try {
         const opensearchClient = context.core.opensearch.client.asInternalUser;
 
-        // Ensure the index exists (create if missing, ignore if already exists)
+        // Ensure the index exists (create if missing, ignore if already exists).
+        // Settings and mappings come from the xdr-telemetry-template index template.
         const indexExists = await opensearchClient.indices.exists({ index: indexName });
         if (!indexExists.body) {
           await opensearchClient.indices.create({
             index: indexName,
-            body: {
-              settings: {
-                number_of_shards: 1,
-                number_of_replicas: 0,
-                'index.hidden': true,
-              },
-              mappings: {
-                properties: {
-                  '@timestamp': { type: 'date' },
-                  'event.type': { type: 'keyword' },
-                  'event.category': { type: 'keyword' },
-                  'event.kind': { type: 'keyword' },
-                  'event.severity': { type: 'integer' },
-                  'event.module': { type: 'keyword' },
-                  'agent.id': { type: 'keyword' },
-                  'host.hostname': { type: 'keyword' },
-                  tags: { type: 'keyword' },
-                  'threat.tactic.name': { type: 'keyword' },
-                  'threat.technique.id': { type: 'keyword' },
-                  'threat.technique.subtechnique.id': { type: 'keyword' },
-                  payload: {
-                    type: 'object',
-                    dynamic: true,
-                    properties: {
-                      system: {
-                        properties: {
-                          memory: {
-                            properties: {
-                              total_bytes: { type: 'long' },
-                              used_bytes: { type: 'long' },
-                              free_bytes: { type: 'long' },
-                              available_bytes: { type: 'long' },
-                              buffers_bytes: { type: 'long' },
-                              cached_bytes: { type: 'long' },
-                              swap_total_bytes: { type: 'long' },
-                              swap_free_bytes: { type: 'long' },
-                              swap_used_bytes: { type: 'long' },
-                              used_percent: { type: 'float' },
-                            },
-                          },
-                          cpu: {
-                            properties: {
-                              total_pct: { type: 'float' },
-                              user_pct: { type: 'float' },
-                              system_pct: { type: 'float' },
-                              idle_pct: { type: 'float' },
-                              iowait_pct: { type: 'float' },
-                              steal_pct: { type: 'float' },
-                              cores: { type: 'integer' },
-                            },
-                          },
-                        },
-                      },
-                      process: {
-                        properties: {
-                          pid: { type: 'integer' },
-                          ppid: { type: 'integer' },
-                          name: { type: 'keyword' },
-                          executable: { type: 'keyword' },
-                          command_line: { type: 'keyword' },
-                          cpu_pct: { type: 'float' },
-                          state: { type: 'keyword' },
-                          start_time: { type: 'date' },
-                        },
-                      },
-                      network: {
-                        properties: {
-                          type: { type: 'keyword' },
-                          transport: { type: 'keyword' },
-                          direction: { type: 'keyword' },
-                        },
-                      },
-                      source: {
-                        properties: {
-                          ip: { type: 'ip' },
-                          port: { type: 'integer' },
-                        },
-                      },
-                      destination: {
-                        properties: {
-                          ip: { type: 'ip' },
-                          port: { type: 'integer' },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
           });
           logger.info(`Created telemetry index [${indexName}]`);
         }
@@ -845,4 +758,7 @@ export function defineRoutes(
       }
     }
   );
+
+  // Register telemetry dashboard query routes (Host / Process / Network tabs)
+  defineTelemetryRoutes(router, logger);
 }

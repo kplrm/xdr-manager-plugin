@@ -8,6 +8,7 @@ import {
 } from '../../../src/core/server';
 import { defineRoutes } from './routes';
 import { installTelemetryDashboard } from './telemetry_dashboard_installer';
+import { installTelemetryIsmPolicy } from './telemetry_ism_installer';
 import { XdrManagerPluginSetup, XdrManagerPluginStart } from './types';
 import { XDR_AGENT_SAVED_OBJECT_TYPE } from '../common';
 
@@ -61,6 +62,12 @@ export class XdrManagerPlugin implements Plugin<XdrManagerPluginSetup, XdrManage
     // Install the out-of-the-box telemetry dashboard (index-pattern + visualizations + dashboard)
     installTelemetryDashboard(repo, this.logger).catch((err) =>
       this.logger.error(`xdr_manager: telemetry dashboard install failed: ${err}`)
+    );
+
+    // Install ISM policy (90-day retention) and index template for telemetry indices
+    const opensearchClient = core.opensearch.client.asInternalUser;
+    installTelemetryIsmPolicy(opensearchClient, this.logger).catch((err) =>
+      this.logger.error(`xdr_manager: ISM policy install failed: ${err}`)
     );
 
     return {};
