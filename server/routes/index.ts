@@ -393,6 +393,10 @@ export function defineRoutes(
         message: `enrolled agent ${payload.hostname}`,
       };
 
+      // If this agent was previously removed via the UI, clear it from the
+      // blocklist so that its heartbeats and telemetry are accepted again.
+      removedAgentIds.delete(payload.agent_id);
+
       // Mark token as consumed in saved objects
       await repo.update<EnrollmentTokenAttributes>(XDR_ENROLLMENT_TOKEN_SAVED_OBJECT_TYPE, tokenSO.id, {
         consumedAt: now,
@@ -476,6 +480,61 @@ export function defineRoutes(
 
       const body: ControlPlaneHeartbeatResponse = {
         message: `heartbeat accepted for ${payload.hostname}`,
+        pending_commands: pendingCommands.length > 0 ? pendingCommands : undefined,
+      };
+
+      return response.ok({ body });
+    }
+  );
+
+  // ── Fast command poll ────────────────────────────────────────────────────
+  // Lightweight read-only endpoint polled by the agent every few seconds.
+  // Returns any pending commands without updating lastSeen or the saved object,
+  // so it is safe to call frequently without inflating heartbeat metrics.
+  router.get(
+    {
+      path: '/api/v1/agents/commands',
+      validate: {
+        query: schema.object({
+          agent_id: schema.string({ minLength: 1 }),
+          agent_version: schema.string({ minLength: 1 }),
+        }),
+      },
+      options: {
+        authRequired: false,
+      },
+    },
+    async (_context, request, response) => {
+      const { agent_id, agent_version } = request.query as {
+        agent_id: string;
+        agent_version: string;
+      };
+
+      if (removedAgentIds.has(agent_id)) {
+        return response.unauthorized({
+          body: { message: `Agent [${agent_id}] has been removed` },
+        });
+      }
+
+      const pendingCommands: string[] = [];
+      if (pendingUpgradeAgentIds.has(agent_id)) {
+        let latestVersion: string | undefined;
+        try {
+          latestVersion = await getCachedLatestVersion();
+        } catch {
+          // GitHub unreachable — skip this poll cycle
+        }
+
+        if (latestVersion && agent_version !== latestVersion) {
+          pendingCommands.push(`upgrade:${latestVersion}`);
+        } else {
+          // Agent is already on the latest version
+          pendingUpgradeAgentIds.delete(agent_id);
+        }
+      }
+
+      const body: ControlPlaneHeartbeatResponse = {
+        message: 'commands polled',
         pending_commands: pendingCommands.length > 0 ? pendingCommands : undefined,
       };
 

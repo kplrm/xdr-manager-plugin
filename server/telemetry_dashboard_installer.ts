@@ -1418,7 +1418,7 @@ function buildSavedObjects() {
 
   const visKernActionPie = vis(VIS_KERN_ACTION_PIE,
     '[XDR] Module Event Actions', 'Distribution of kernel module event actions: insmod vs rmmod',
-    pieVis('[XDR] Module Event Actions', 'event.action', 'Action', 5),
+    pieVis('[XDR] Module Event Actions', 'event.type', 'Action', 5),
     'event.category: "driver"');
 
   const visKernTopModules = vis(VIS_KERN_TOP_MODULES,
@@ -1428,7 +1428,7 @@ function buildSavedObjects() {
 
   const visKernTimeline = vis(VIS_KERN_TIMELINE,
     '[XDR] Kernel Module Events Over Time', 'Kernel module load and unload event volume over time, stacked by action',
-    countAreaGroupVis('[XDR] Kernel Module Events Over Time', 'event.action', 'Action', 'Events'),
+    countAreaGroupVis('[XDR] Kernel Module Events Over Time', 'event.type', 'Action', 'Events'),
     'event.category: "driver"');
 
   // ── Kernel Module Dashboard ───────────────────────────────────────────────
@@ -1487,11 +1487,11 @@ function buildSavedObjects() {
   const visTtyTopProcs = vis(VIS_TTY_TOP_PROCS,
     '[XDR] Top Processes Starting TTY Sessions', 'Top 20 processes that most frequently start terminal sessions',
     topNTermsCountBarVis('[XDR] Top Processes Starting TTY Sessions', 'payload.process.name', 'Process', 20),
-    'event.module: "telemetry.tty" and event.action: "tty.session_start"');
+    'event.module: "telemetry.tty" and event.type: "tty.session_start"');
 
   const visTtyTimeline = vis(VIS_TTY_TIMELINE,
     '[XDR] TTY Events Over Time', 'TTY session start and end events over time, stacked by action',
-    countAreaGroupVis('[XDR] TTY Events Over Time', 'event.action', 'Action', 'Events'),
+    countAreaGroupVis('[XDR] TTY Events Over Time', 'event.type', 'Action', 'Events'),
     'event.module: "telemetry.tty"');
 
   // ── TTY Dashboard ─────────────────────────────────────────────────────────
@@ -1544,7 +1544,7 @@ function buildSavedObjects() {
 
   const visSchedActionPie = vis(VIS_SCHED_ACTION_PIE,
     '[XDR] Task Event Actions', 'Distribution of task change actions: created, modified, deleted',
-    pieVis('[XDR] Task Event Actions', 'event.action', 'Action', 5),
+    pieVis('[XDR] Task Event Actions', 'event.type', 'Action', 5),
     'event.category: "configuration"');
 
   const visSchedTopFiles = vis(VIS_SCHED_TOP_FILES,
@@ -1554,7 +1554,7 @@ function buildSavedObjects() {
 
   const visSchedTimeline = vis(VIS_SCHED_TIMELINE,
     '[XDR] Scheduled Task Events Over Time', 'Scheduled task change events over time, stacked by action',
-    countAreaGroupVis('[XDR] Scheduled Task Events Over Time', 'event.action', 'Action', 'Events'),
+    countAreaGroupVis('[XDR] Scheduled Task Events Over Time', 'event.type', 'Action', 'Events'),
     'event.category: "configuration"');
 
   // ── Scheduled Task Dashboard ──────────────────────────────────────────────

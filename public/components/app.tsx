@@ -17,6 +17,7 @@ import {
   EuiForm,
   EuiFormRow,
   EuiHorizontalRule,
+  EuiIcon,
   EuiInMemoryTable,
   EuiPage,
   EuiPageBody,
@@ -108,6 +109,14 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
   const [policies, setPolicies] = useState<XdrPolicy[]>([]);
   const [latestVersion, setLatestVersion] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
+  const [upgradingAgentIds, setUpgradingAgentIds] = useState<Set<string>>(new Set());
+  // Per-agent inline upgrade feedback.
+  // queued  : upgrade command sent, waiting for agent to pick it up via heartbeat.
+  // confirmed: agent reported the new version; green check shown for 4 s, then cleared.
+  // error   : upgrade API call failed; red icon persists until user retries.
+  const [upgradeErrorByAgentId, setUpgradeErrorByAgentId] = useState<Record<string, string>>({});
+  const [upgradeQueuedAgentIds, setUpgradeQueuedAgentIds] = useState<Set<string>>(new Set());
+  const [upgradeConfirmedAgentIds, setUpgradeConfirmedAgentIds] = useState<Set<string>>(new Set());
 
   const [enrollmentTokensList, setEnrollmentTokensList] = useState<XdrEnrollmentToken[]>([]);
   const [isLoadingTokens, setIsLoadingTokens] = useState(false);
@@ -258,6 +267,17 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
 
   const runAction = useCallback(
     async (agentId: string, action: XdrAction) => {
+      // Clear any previous inline feedback for this agent before retrying.
+      setUpgradeErrorByAgentId((prev) => {
+        const next = { ...prev };
+        delete next[agentId];
+        return next;
+      });
+      setUpgradingAgentIds((prev) => {
+        const next = new Set(prev);
+        next.add(agentId);
+        return next;
+      });
       try {
         const response = await http.post<RunActionResponse>(`/api/xdr_manager/agents/${agentId}/action`, {
           body: JSON.stringify({ action }),
@@ -265,18 +285,63 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
         setAgents((previous) =>
           previous.map((agent) => (agent.id === response.agent.id ? response.agent : agent))
         );
-        notifications.toasts.addSuccess(response.message);
+        // Upgrade queued — no timeout. The queued state is cleared by the
+        // useEffect below once the agent reports the new version via heartbeat.
+        setUpgradeQueuedAgentIds((prev) => {
+          const next = new Set(prev);
+          next.add(agentId);
+          return next;
+        });
       } catch (error) {
-        notifications.toasts.addDanger({
-          title: i18n.translate('xdrManager.actionError', {
-            defaultMessage: 'Unable to run action',
-          }),
-          text: error instanceof Error ? error.message : String(error),
+        // Store the error message for inline display next to the button.
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        setUpgradeErrorByAgentId((prev) => ({ ...prev, [agentId]: errorMessage }));
+      } finally {
+        setUpgradingAgentIds((prev) => {
+          const next = new Set(prev);
+          next.delete(agentId);
+          return next;
         });
       }
     },
-    [http, notifications.toasts]
+    [http]
   );
+
+  // When the 5 s poll picks up a new agent version that matches latestVersion,
+  // transition queued → confirmed (green check for 4 s) for that agent.
+  useEffect(() => {
+    if (upgradeQueuedAgentIds.size === 0 || !latestVersion) {
+      return;
+    }
+    const confirmed: string[] = [];
+    for (const agentId of upgradeQueuedAgentIds) {
+      const agent = agents.find((a) => a.id === agentId);
+      if (agent && agent.version === latestVersion) {
+        confirmed.push(agentId);
+      }
+    }
+    if (confirmed.length === 0) {
+      return;
+    }
+    setUpgradeQueuedAgentIds((prev) => {
+      const next = new Set(prev);
+      confirmed.forEach((id) => next.delete(id));
+      return next;
+    });
+    setUpgradeConfirmedAgentIds((prev) => {
+      const next = new Set(prev);
+      confirmed.forEach((id) => next.add(id));
+      return next;
+    });
+    // Clear the confirmed (green check) state after 4 s.
+    window.setTimeout(() => {
+      setUpgradeConfirmedAgentIds((prev) => {
+        const next = new Set(prev);
+        confirmed.forEach((id) => next.delete(id));
+        return next;
+      });
+    }, 4000);
+  }, [agents, latestVersion, upgradeQueuedAgentIds]);
 
   const generateEnrollmentToken = useCallback(async () => {
     if (!policyId) {
@@ -524,33 +589,115 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
     },
     {
       name: i18n.translate('xdrManager.column.actions', { defaultMessage: 'Actions' }),
-      width: '200px',
+      width: '240px',
       render: (agent: XdrAgent) => {
-        const canUpgrade = Boolean(latestVersion && agent.version !== latestVersion);
+        // Disabled only when we positively know the agent is already on the latest version.
+        // Unknown latestVersion (GitHub unreachable) still allows queuing — the server
+        // resolves the target version at the next heartbeat.
+        const alreadyLatest = Boolean(latestVersion && agent.version === latestVersion);
+        const isUpgrading = upgradingAgentIds.has(agent.id);
+        // isQueued: command sent to server, waiting for agent to pick it up via heartbeat.
+        const isQueued = upgradeQueuedAgentIds.has(agent.id);
+        // isConfirmed: agent reported the new version; green check shown briefly.
+        const isConfirmed = upgradeConfirmedAgentIds.has(agent.id);
+        const upgradeError = upgradeErrorByAgentId[agent.id];
+
+        const upgradeTooltip = isQueued
+          ? i18n.translate('xdrManager.action.upgradeTooltipQueued', {
+              defaultMessage: 'Upgrade command queued — waiting for the agent to pick it up on its next heartbeat',
+            })
+          : alreadyLatest
+          ? i18n.translate('xdrManager.action.upgradeTooltipCurrent', {
+              defaultMessage: 'Agent is already on the latest version',
+            })
+          : latestVersion
+          ? i18n.translate('xdrManager.action.upgradeTooltip', {
+              defaultMessage: 'Upgrade to v{version}',
+              values: { version: latestVersion },
+            })
+          : i18n.translate('xdrManager.action.upgradeTooltipUnknown', {
+              defaultMessage: 'Queue upgrade — target version will be resolved at next heartbeat',
+            });
+
         return (
-          <EuiFlexGroup gutterSize="s" responsive={false}>
+          <EuiFlexGroup gutterSize="xs" alignItems="center" responsive={false}>
             <EuiFlexItem grow={false}>
-              <EuiToolTip
-                content={
-                  canUpgrade
-                    ? i18n.translate('xdrManager.action.upgradeTooltip', {
-                        defaultMessage: 'Upgrade to v{version}',
-                        values: { version: latestVersion },
-                      })
-                    : i18n.translate('xdrManager.action.upgradeTooltipCurrent', {
-                        defaultMessage: 'Agent is already on the latest version',
-                      })
-                }
-              >
-                <EuiButtonEmpty
-                  size="xs"
-                  isDisabled={!canUpgrade}
-                  onClick={() => runAction(agent.id, 'upgrade')}
-                >
-                  {i18n.translate('xdrManager.action.upgrade', { defaultMessage: 'Upgrade' })}
-                </EuiButtonEmpty>
+              {/* span wrapper ensures EuiToolTip can attach its ref even when the
+                  button is disabled (disabled elements don't fire mouse events). */}
+              <EuiToolTip content={upgradeTooltip}>
+                <span>
+                  <EuiButtonEmpty
+                    size="xs"
+                    isDisabled={alreadyLatest || isUpgrading || isQueued}
+                    isLoading={isUpgrading}
+                    onClick={() => runAction(agent.id, 'upgrade')}
+                  >
+                    {isQueued
+                      ? i18n.translate('xdrManager.action.upgradeQueued', { defaultMessage: 'Queued' })
+                      : i18n.translate('xdrManager.action.upgrade', { defaultMessage: 'Upgrade' })}
+                  </EuiButtonEmpty>
+                </span>
               </EuiToolTip>
             </EuiFlexItem>
+
+            {/* Confirmed indicator — green check visible for 4 s once the agent's
+                heartbeat confirms the version bump. Separate from the button so
+                it is never affected by the disabled/grayed-out button styles. */}
+            {isConfirmed && (
+              <EuiFlexItem grow={false}>
+                <EuiToolTip
+                  position="top"
+                  content={i18n.translate('xdrManager.action.upgradeConfirmedTooltip', {
+                    defaultMessage: 'Agent successfully upgraded to v{version}',
+                    values: { version: latestVersion },
+                  })}
+                >
+                  <span>
+                    <EuiIcon
+                      type="checkInCircleFilled"
+                      color="success"
+                      size="m"
+                      aria-label={i18n.translate('xdrManager.action.upgradeConfirmedAriaLabel', {
+                        defaultMessage: 'Upgrade confirmed',
+                      })}
+                    />
+                  </span>
+                </EuiToolTip>
+              </EuiFlexItem>
+            )}
+
+            {/* Error indicator — red alert icon persists until the user retries.
+                span wrapper is required for EuiToolTip ref-forwarding on EuiIcon. */}
+            {upgradeError && !isUpgrading && !isQueued && (
+              <EuiFlexItem grow={false}>
+                <EuiToolTip
+                  position="top"
+                  content={
+                    <span>
+                      <strong>
+                        {i18n.translate('xdrManager.action.upgradeFailed', {
+                          defaultMessage: 'Upgrade failed:',
+                        })}
+                      </strong>{' '}
+                      {upgradeError}
+                    </span>
+                  }
+                >
+                  <span>
+                    <EuiIcon
+                      type="alert"
+                      color="danger"
+                      size="m"
+                      style={{ cursor: 'help' }}
+                      aria-label={i18n.translate('xdrManager.action.upgradeFailedAriaLabel', {
+                        defaultMessage: 'Upgrade failed',
+                      })}
+                    />
+                  </span>
+                </EuiToolTip>
+              </EuiFlexItem>
+            )}
+
             <EuiFlexItem grow={false}>
               <EuiButtonEmpty size="xs" color="danger" onClick={() => removeAgent(agent)}>
                 {i18n.translate('xdrManager.action.remove', { defaultMessage: 'Remove' })}
