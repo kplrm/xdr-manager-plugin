@@ -202,7 +202,9 @@ jobs:
                 apt-get update -qq
                 apt-get install -y bash ca-certificates curl gzip tar >/dev/null
               else
-                dnf install -y bash ca-certificates curl gzip tar which findutils >/dev/null
+                # curl-minimal is pre-installed in almalinux:9 and conflicts with curl;
+                # use --allowerasing to replace it, or rely on the already-present curl binary.
+                dnf install -y --allowerasing bash ca-certificates curl gzip tar which findutils >/dev/null
               fi
 
               mkdir -p /opt/osd
@@ -216,7 +218,7 @@ jobs:
 
               \${OSD_HOME}/bin/opensearch-dashboards-plugin install --allow-root file:///pkg/xdr-manager-plugin.zip
               test -d \${OSD_HOME}/plugins/${{ env.PLUGIN_ID }}
-              \${OSD_HOME}/bin/opensearch-dashboards-plugin list | grep -Fx '${{ env.PLUGIN_ID }}'
+              \${OSD_HOME}/bin/opensearch-dashboards-plugin list --allow-root | grep -Fx '${{ env.PLUGIN_ID }}'
             "
 
   release:
