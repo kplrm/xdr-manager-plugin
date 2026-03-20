@@ -9,8 +9,8 @@ env:
   PLUGIN_NAME: xdr-manager-plugin
   PLUGIN_ID: xdrManager
   OPENSEARCH_DASHBOARDS_REPOSITORY: opensearch-project/OpenSearch-Dashboards
-  OPENSEARCH_DASHBOARDS_VERSION: 3.6.0
-  OPENSEARCH_DASHBOARDS_REF: 3.6.0
+  OPENSEARCH_DASHBOARDS_VERSION: 3.5.0
+  OPENSEARCH_DASHBOARDS_REF: 3.5.0
 
 jobs:
   version:
@@ -137,24 +137,28 @@ jobs:
       fail-fast: true
       matrix:
         include:
+          # Debian / amd64
           - os: debian
             arch: amd64
             test_image: debian:stable-slim
             platform: linux/amd64
             osd_suffix: linux-x64
 
+          # Debian / arm64
           - os: debian
             arch: arm64
             test_image: debian:stable-slim
             platform: linux/arm64
             osd_suffix: linux-arm64
 
+          # CentOS-compatible / amd64
           - os: centos
             arch: amd64
             test_image: almalinux:9
             platform: linux/amd64
             osd_suffix: linux-x64
 
+          # CentOS-compatible / arm64
           - os: centos
             arch: arm64
             test_image: almalinux:9

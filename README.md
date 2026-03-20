@@ -6,7 +6,7 @@ OpenSearch Dashboards plugin for enrolling, managing, upgrading, and monitoring 
 
 - OpenSearch must already be deployed.
 - OpenSearch Dashboards must already be deployed and connected to that OpenSearch cluster.
-- Supported plugin release target: OpenSearch Dashboards `3.6.0`.
+- Supported plugin release target: OpenSearch Dashboards `3.5.0`.
 
 This plugin does not deploy OpenSearch or OpenSearch Dashboards for you.
 
@@ -27,7 +27,7 @@ Run this on the OpenSearch Dashboards host:
 
 ```bash
 VERSION=<plugin-release-version>
-OSD_VERSION=3.6.0
+OSD_VERSION=3.5.0
 sudo /usr/share/opensearch-dashboards/bin/opensearch-dashboards-plugin install \
 	"https://github.com/kplrm/xdr-manager-plugin/releases/download/v${VERSION}/xdr-manager-plugin_${VERSION}_osd-${OSD_VERSION}.zip"
 sudo systemctl restart opensearch-dashboards
