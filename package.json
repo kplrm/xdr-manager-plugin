@@ -6,6 +6,8 @@
   "license": "Non-commercial. Provided for legal review purposes only. Subject to change.",
   "private": true,
   "scripts": {
+    "version:sync": "node ./scripts/sync_version.js",
+    "prebuild": "yarn version:sync",
     "build": "yarn plugin-helpers build",
     "plugin-helpers": "node ../../scripts/plugin_helpers",
     "osd": "node ../../scripts/osd"
