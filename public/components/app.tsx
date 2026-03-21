@@ -124,6 +124,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
   const [isEnrollFlyoutOpen, setIsEnrollFlyoutOpen] = useState(false);
   const [policyId, setPolicyId] = useState('');
   const [tagsText, setTagsText] = useState('linux,production');
+  const [controlPlaneUrl, setControlPlaneUrl] = useState('');
   const [enrollmentToken, setEnrollmentToken] = useState('');
   const [tokenPolicyId, setTokenPolicyId] = useState('');
   const [tokenConsumedHostname, setTokenConsumedHostname] = useState('');
@@ -762,14 +763,43 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
     },
   ];
 
+  const revokeEnrollmentToken = useCallback(
+    async (token: XdrEnrollmentToken) => {
+      const confirmed = window.confirm(
+        i18n.translate('xdrManager.revokeTokenConfirm', {
+          defaultMessage:
+            'Revoke this enrollment token? It will no longer be accepted for enrollment.',
+        })
+      );
+      if (!confirmed) return;
+      try {
+        await http.delete(`/api/xdr_manager/enrollment_tokens/${encodeURIComponent(token.token)}`);
+        notifications.toasts.addSuccess(
+          i18n.translate('xdrManager.tokenRevoked', {
+            defaultMessage: 'Enrollment token revoked.',
+          })
+        );
+        await loadEnrollmentTokens();
+      } catch (error) {
+        notifications.toasts.addDanger({
+          title: i18n.translate('xdrManager.revokeTokenError', {
+            defaultMessage: 'Unable to revoke token',
+          }),
+          text: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+    [http, loadEnrollmentTokens, notifications.toasts]
+  );
+
   const tokenColumns = [
     {
       field: 'token' as const,
       name: i18n.translate('xdrManager.tokenColumn.token', { defaultMessage: 'Token' }),
       render: (_token: string, item: XdrEnrollmentToken) => (
         <EuiText size="s">
-          <code style={{ fontFamily: 'monospace', fontSize: '0.8em' }}>
-            {item.token.length > 40 ? `${item.token.slice(0, 40)}…` : item.token}
+          <code style={{ fontFamily: 'monospace', fontSize: '0.8em', wordBreak: 'break-all' as const }}>
+            {item.token}
           </code>
         </EuiText>
       ),
@@ -789,6 +819,27 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
       field: 'createdAt' as const,
       name: i18n.translate('xdrManager.tokenColumn.createdAt', { defaultMessage: 'Created' }),
       render: (ts: string) => new Date(ts).toLocaleString(),
+    },
+    {
+      name: i18n.translate('xdrManager.tokenColumn.actions', { defaultMessage: 'Actions' }),
+      width: '80px',
+      render: (item: XdrEnrollmentToken) => (
+        <EuiToolTip
+          content={i18n.translate('xdrManager.revokeTokenTooltip', {
+            defaultMessage: 'Revoke token',
+          })}
+        >
+          <EuiButtonEmpty
+            size="xs"
+            color="danger"
+            iconType="trash"
+            onClick={() => revokeEnrollmentToken(item)}
+            aria-label={i18n.translate('xdrManager.revokeTokenAriaLabel', {
+              defaultMessage: 'Revoke token',
+            })}
+          />
+        </EuiToolTip>
+      ),
     },
   ];
 
@@ -1117,6 +1168,21 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                     />
                   </EuiFormRow>
 
+                  <EuiFormRow
+                    label={i18n.translate('xdrManager.field.controlPlaneUrl', {
+                      defaultMessage: 'Control plane URL',
+                    })}
+                    helpText={i18n.translate('xdrManager.field.controlPlaneUrlHelp', {
+                      defaultMessage: 'URL of this XDR Manager as reachable from the agent host.',
+                    })}
+                  >
+                    <EuiFieldText
+                      value={controlPlaneUrl}
+                      onChange={(event) => setControlPlaneUrl(event.target.value)}
+                      placeholder="http://localhost:5601"
+                    />
+                  </EuiFormRow>
+
                   <EuiHorizontalRule margin="m" />
 
                   <EuiFormRow
@@ -1182,9 +1248,39 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                             </EuiButtonEmpty>
                           </>
                         )}
-                        <EuiSpacer size="s" />
+                        <EuiSpacer size="m" />
+                        <EuiText size="s">
+                          <strong>
+                            {i18n.translate('xdrManager.installInstructionTitle', {
+                              defaultMessage: 'Step 1 — Install xdr-agent',
+                            })}
+                          </strong>
+                        </EuiText>
+                        <EuiSpacer size="xs" />
                         <EuiCodeBlock language="bash" isCopyable>
-                          {`sudo xdr-agent enroll ${enrollmentToken} --config /etc/xdr-agent/config.json`}
+                          {[
+                            'VER=$(curl -fsSL https://api.github.com/repos/kplrm/xdr-agent/releases/latest | grep \'"tag_name"\' | sed \'s/.*"v\\([^"]*\\)".*/\\1/\')',
+                            'ARCH=$([ "$(uname -m)" = x86_64 ] && echo amd64 || echo arm64)',
+                            'GH="https://github.com/kplrm/xdr-agent/releases/download/v${VER}"',
+                            'command -v dpkg &>/dev/null \\',
+                            '  && { curl -fsSLo /tmp/xdr.deb "$GH/xdr-agent_${VER}_${ARCH}.deb" && sudo dpkg -i /tmp/xdr.deb; } \\',
+                            '  || { curl -fsSLo /tmp/xdr.rpm "$GH/xdr-agent-${VER}-1.$([ \\"$ARCH\\" = amd64 ] && echo x86_64 || echo aarch64).rpm" && sudo rpm -ivh /tmp/xdr.rpm; }',
+                          ].join('\n')}
+                        </EuiCodeBlock>
+                        <EuiSpacer size="m" />
+                        <EuiText size="s">
+                          <strong>
+                            {i18n.translate('xdrManager.enrollCommandTitle', {
+                              defaultMessage: 'Step 2 — Enroll the agent',
+                            })}
+                          </strong>
+                        </EuiText>
+                        <EuiSpacer size="xs" />
+                        <EuiCodeBlock language="bash" isCopyable>
+                          {`sudo xdr-agent enroll ${enrollmentToken} \\
+  --control-plane-url=${controlPlaneUrl || window.location.origin} \\
+  --policy-id=${tokenPolicyId}${tagsText.trim() ? ` \\
+  --tags=${tagsText.trim()}` : ''}`}
                         </EuiCodeBlock>
                       </EuiCallOut>
                     </>

@@ -271,6 +271,41 @@ export function defineRoutes(
     }
   );
 
+  // ── DELETE /api/xdr_manager/enrollment_tokens/{token} ──────────────────
+  // Revokes (deletes) an enrollment token so it can no longer be used.
+
+  router.delete(
+    {
+      path: '/api/xdr_manager/enrollment_tokens/{token}',
+      validate: {
+        params: schema.object({
+          token: schema.string({ minLength: 1 }),
+        }),
+      },
+    },
+    async (_context, request, response) => {
+      const repo = await agentRepoPromise;
+      const result = await repo.find<EnrollmentTokenAttributes>({
+        type: XDR_ENROLLMENT_TOKEN_SAVED_OBJECT_TYPE,
+        search: request.params.token,
+        searchFields: ['token'],
+        perPage: 1,
+      });
+      const tokenSO = result.saved_objects[0] ?? null;
+      if (!tokenSO) {
+        return response.notFound({
+          body: `Enrollment token not found`,
+        });
+      }
+
+      await repo.delete(XDR_ENROLLMENT_TOKEN_SAVED_OBJECT_TYPE, tokenSO.id);
+
+      return response.ok({
+        body: { message: 'Enrollment token revoked' },
+      });
+    }
+  );
+
   router.post(
     {
       path: '/api/v1/agents/enroll',
