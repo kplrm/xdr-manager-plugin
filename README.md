@@ -4,11 +4,9 @@ OpenSearch Dashboards plugin for enrolling, managing, upgrading, and monitoring 
 
 ## Requirements
 
-- OpenSearch must already be deployed.
-- OpenSearch Dashboards must already be deployed and connected to that OpenSearch cluster.
-- Supported plugin release target: OpenSearch Dashboards `3.5.0`.
-
-This plugin does not deploy OpenSearch or OpenSearch Dashboards for you.
+- OpenSearch is already running.
+- OpenSearch Dashboards is already running and connected to that OpenSearch cluster.
+- OpenSearch Dashboards version: `3.5.0`.
 
 ## Current features
 
@@ -21,22 +19,13 @@ This plugin does not deploy OpenSearch or OpenSearch Dashboards for you.
 - Telemetry dashboards for host, process, and network data from `.xdr-agent-telemetry-*` indices.
 - Saved object persistence for agents and enrollment tokens.
 
-## Deploy as a Docker container (recommended)
+## Deploy
 
-Pre-built multi-platform images (`linux/amd64`, `linux/arm64`) are published to the GitHub Container Registry alongside each release.
+### Option 1 — Replace the OpenSearch Dashboards container (recommended)
 
-**`docker run`:**
+Pre-built images with the plugin already installed are published to the GitHub Container Registry for every release. Replace your existing `opensearch-dashboards` service with this image — no plugin installation step needed.
 
-```bash
-docker run -d \
-  --name opensearch-dashboards \
-  -p 5601:5601 \
-  -e 'OPENSEARCH_HOSTS=["http://<opensearch-host>:9200"]' \
-  -e DISABLE_SECURITY_DASHBOARDS_PLUGIN=true \
-  ghcr.io/kplrm/opensearch-dashboards-xdr:latest
-```
-
-**`docker-compose.yml`:**
+Update your `docker-compose.yml`:
 
 ```yaml
 services:
@@ -54,23 +43,76 @@ services:
       - opensearch-node1
 ```
 
+Then restart the service:
+
+```bash
+docker compose up -d opensearch-dashboards
+```
+
 Available image tags:
 - `ghcr.io/kplrm/opensearch-dashboards-xdr:latest` — most recent release
 - `ghcr.io/kplrm/opensearch-dashboards-xdr:v0.1.0` — pinned version
 
-## Install plugin on existing OpenSearch Dashboards
+### Option 2 — Install into the running container
 
-Run this on the OpenSearch Dashboards host:
+If you prefer to keep your existing `opensearch-dashboards` container, install the plugin into it directly:
 
 ```bash
-VERSION=<plugin-release-version>
+VERSION=0.1.0
+OSD_VERSION=3.5.0
+
+docker exec opensearch-dashboards \
+  /usr/share/opensearch-dashboards/bin/opensearch-dashboards-plugin install --allow-root \
+  "https://github.com/kplrm/xdr-manager-plugin/releases/download/v${VERSION}/xdr-manager-plugin_${VERSION}_osd-${OSD_VERSION}.zip"
+
+docker restart opensearch-dashboards
+```
+
+### Option 3 — Install on a bare-metal OpenSearch Dashboards
+
+```bash
+VERSION=0.1.0
 OSD_VERSION=3.5.0
 sudo /usr/share/opensearch-dashboards/bin/opensearch-dashboards-plugin install \
-	"https://github.com/kplrm/xdr-manager-plugin/releases/download/v${VERSION}/xdr-manager-plugin_${VERSION}_osd-${OSD_VERSION}.zip"
+  "https://github.com/kplrm/xdr-manager-plugin/releases/download/v${VERSION}/xdr-manager-plugin_${VERSION}_osd-${OSD_VERSION}.zip"
 sudo systemctl restart opensearch-dashboards
 ```
 
-Then open OpenSearch Dashboards and verify that **XDR Manager** appears in the left navigation.
+After any of the above, open OpenSearch Dashboards and verify that **XDR Manager** appears in the left navigation.
+
+## Build from source
+
+From the OpenSearch Dashboards root:
+
+```bash
+yarn osd bootstrap --single-version=loose
+cd plugins/xdr-manager-plugin
+cat VERSION
+yarn build
+```
+
+The ZIP artifact is created in `plugins/xdr-manager-plugin/build/`.
+
+The plugin version is defined in `VERSION`. The build syncs `package.json` and `opensearch_dashboards.json` from that file.
+
+## xdr-agent enrollment
+
+1. Open **XDR Manager**.
+2. Create or select a policy.
+3. Generate an enrollment token.
+4. Set these values in `xdr-agent/config/config.json`:
+
+```json
+{
+	"control_plane_url": "http://<opensearch-dashboards-host>:5601",
+	"enrollment_path": "/api/v1/agents/enroll",
+	"enrollment_token": "xdr_enroll_<generated-token>",
+	"policy_id": "<policy-id>"
+}
+```
+
+The agent will then enroll, send heartbeats, poll for commands, and ship telemetry to the control plane.
+
 
 ## Build from source
 
