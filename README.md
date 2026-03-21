@@ -21,7 +21,44 @@ This plugin does not deploy OpenSearch or OpenSearch Dashboards for you.
 - Telemetry dashboards for host, process, and network data from `.xdr-agent-telemetry-*` indices.
 - Saved object persistence for agents and enrollment tokens.
 
-## Deploy from GitHub Release
+## Deploy as a Docker container (recommended)
+
+Pre-built multi-platform images (`linux/amd64`, `linux/arm64`) are published to the GitHub Container Registry alongside each release.
+
+**`docker run`:**
+
+```bash
+docker run -d \
+  --name opensearch-dashboards \
+  -p 5601:5601 \
+  -e 'OPENSEARCH_HOSTS=["http://<opensearch-host>:9200"]' \
+  -e DISABLE_SECURITY_DASHBOARDS_PLUGIN=true \
+  ghcr.io/kplrm/opensearch-dashboards-xdr:latest
+```
+
+**`docker-compose.yml`:**
+
+```yaml
+services:
+  opensearch-dashboards:
+    image: ghcr.io/kplrm/opensearch-dashboards-xdr:latest
+    container_name: opensearch-dashboards
+    ports:
+      - 5601:5601
+    environment:
+      - OPENSEARCH_HOSTS=["http://opensearch-node1:9200"]
+      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
+    networks:
+      - opensearch-net
+    depends_on:
+      - opensearch-node1
+```
+
+Available image tags:
+- `ghcr.io/kplrm/opensearch-dashboards-xdr:latest` — most recent release
+- `ghcr.io/kplrm/opensearch-dashboards-xdr:v0.1.0` — pinned version
+
+## Install plugin on existing OpenSearch Dashboards
 
 Run this on the OpenSearch Dashboards host:
 
