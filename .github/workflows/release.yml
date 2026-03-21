@@ -217,8 +217,13 @@ jobs:
               fi
 
               \${OSD_HOME}/bin/opensearch-dashboards-plugin install --allow-root file:///pkg/xdr-manager-plugin.zip
-              test -d \${OSD_HOME}/plugins/${{ env.PLUGIN_ID }}
-              \${OSD_HOME}/bin/opensearch-dashboards-plugin list --allow-root | grep -Fx '${{ env.PLUGIN_ID }}'
+              echo '==> Contents of plugins/ after install:'
+              ls \${OSD_HOME}/plugins/
+              if [ ! -d \${OSD_HOME}/plugins/${{ env.PLUGIN_ID }} ]; then
+                echo "ERROR: expected plugin directory '\${OSD_HOME}/plugins/${{ env.PLUGIN_ID }}' not found" >&2
+                exit 1
+              fi
+              echo '==> Smoke test PASSED: ${{ env.PLUGIN_ID }} is installed'
             "
 
   release:
