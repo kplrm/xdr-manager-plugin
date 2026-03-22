@@ -37,16 +37,6 @@ const policies: XdrPolicy[] = [
     osqueryEnabled: false,
     logLevel: 'standard',
   },
-  {
-    id: 'high-security-linux',
-    name: 'High Security Linux',
-    description: 'Hardening profile for production Linux workloads.',
-    malwareProtection: true,
-    fileIntegrityMonitoring: true,
-    autoUpgrade: true,
-    osqueryEnabled: true,
-    logLevel: 'verbose',
-  },
 ];
 
 type XdrAgentAttributes = Omit<XdrAgent, 'id'>;
