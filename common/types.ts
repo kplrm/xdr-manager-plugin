@@ -166,6 +166,8 @@ export interface ControlPlaneTelemetryRequest {
 
 export interface ControlPlaneTelemetryResponse {
   indexed: number;
+  telemetry_indexed?: number;
+  security_indexed?: number;
   message: string;
 }
 

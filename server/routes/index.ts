@@ -823,11 +823,31 @@ export function defineRoutes(
     }
   );
 
-  // ── Telemetry ingestion ─────────────────────────────────────────────────
-  // Agent-facing endpoint: receives batched telemetry events and indexes
-  // them into OpenSearch under .xdr-agent-telemetry-YYYY.MM.DD.
+  // ── Topic ingestion (telemetry, security, logs) ──────────────────────────
+  // Agent-facing endpoints. Each topic uses its own HTTP path and index.
 
   const XDR_TELEMETRY_INDEX_PREFIX = '.xdr-agent-telemetry';
+  const XDR_SECURITY_INDEX_PREFIX = '.xdr-agent-security';
+  const XDR_LOGS_INDEX_PREFIX = 'xdr-agent-logs';
+  const SECURITY_MODULE_PREFIXES = ['detection.', 'prevention.', 'response.'];
+
+  const isSecurityEvent = (event: ControlPlaneTelemetryRequest['events'][number]): boolean => {
+    const eventModule = event['event.module'] ?? '';
+    return (
+      event['event.kind'] === 'alert' ||
+      event['event.category'] === 'intrusion_detection' ||
+      SECURITY_MODULE_PREFIXES.some((prefix) => eventModule.startsWith(prefix))
+    );
+  };
+
+  const isAgentLogEvent = (event: ControlPlaneTelemetryRequest['events'][number]): boolean => {
+    return event['event.type'] === 'agent.log' || event['event.module'] === 'agent.logger';
+  };
+
+  const buildDailyIndexName = (prefix: string): string => {
+    const today = new Date().toISOString().slice(0, 10);
+    return `${prefix}-${today}`;
+  };
 
   const telemetryEventSchema = schema.object({
     id: schema.string(),
@@ -845,6 +865,46 @@ export function defineRoutes(
     'threat.technique.subtechnique.id': schema.maybe(schema.string()),
     tags: schema.maybe(schema.arrayOf(schema.string())),
   });
+
+  const indexBatch = async (
+    context: any,
+    payload: ControlPlaneTelemetryRequest,
+    events: ControlPlaneTelemetryRequest['events'],
+    indexName: string,
+    kind: 'telemetry' | 'security' | 'logs'
+  ) => {
+    if (events.length === 0) {
+      return;
+    }
+
+    const opensearchClient = context.core.opensearch.client.asInternalUser;
+    const indexExists = await opensearchClient.indices.exists({ index: indexName });
+    if (!indexExists.body) {
+      await opensearchClient.indices.create({ index: indexName });
+      logger.info(`Created ${kind} index [${indexName}]`);
+    }
+
+    const bulkBody: Array<Record<string, unknown>> = [];
+    for (const evt of events) {
+      bulkBody.push({ index: { _index: indexName, _id: evt.id } });
+      bulkBody.push({
+        ...evt,
+        'agent.id': payload.agent_id,
+        indexed_at: new Date().toISOString(),
+      });
+    }
+
+    const bulkResponse = await opensearchClient.bulk({ body: bulkBody });
+    if (bulkResponse.body.errors) {
+      const failedItems = bulkResponse.body.items.filter((item: any) => {
+        const action = item.index || item.create || item.update || item.delete;
+        return action?.error;
+      });
+      logger.warn(
+        `Bulk index to [${indexName}]: ${failedItems.length}/${events.length} ${kind} events failed`
+      );
+    }
+  };
 
   router.post(
     {
@@ -869,57 +929,27 @@ export function defineRoutes(
         });
       }
 
-      // Build the daily index name
-      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-      const indexName = `${XDR_TELEMETRY_INDEX_PREFIX}-${today}`;
+      const securityCount = payload.events.filter((evt) => isSecurityEvent(evt)).length;
+      if (securityCount > 0) {
+        return response.badRequest({
+          body: {
+            message: `${securityCount} security-classified events received on telemetry endpoint; send them to /api/v1/agents/security`,
+          },
+        });
+      }
 
       try {
-        const opensearchClient = context.core.opensearch.client.asInternalUser;
-
-        // Ensure the index exists (create if missing, ignore if already exists).
-        // Settings and mappings come from the xdr-telemetry-template index template.
-        const indexExists = await opensearchClient.indices.exists({ index: indexName });
-        if (!indexExists.body) {
-          await opensearchClient.indices.create({
-            index: indexName,
-          });
-          logger.info(`Created telemetry index [${indexName}]`);
-        }
-
-        // Bulk-index all events
-        const bulkBody: Array<Record<string, unknown>> = [];
-        for (const evt of payload.events) {
-          bulkBody.push({ index: { _index: indexName, _id: evt.id } });
-          bulkBody.push({
-            ...evt,
-            // Ensure the agent.id in the document matches the envelope
-            'agent.id': payload.agent_id,
-            indexed_at: new Date().toISOString(),
-          });
-        }
-
-        const bulkResponse = await opensearchClient.bulk({ body: bulkBody });
-
-        if (bulkResponse.body.errors) {
-          const failedItems = bulkResponse.body.items.filter(
-            (item: any) => {
-              const action = item.index || item.create || item.update || item.delete;
-              return action?.error;
-            }
-          );
-          logger.warn(
-            `Bulk index to [${indexName}]: ${failedItems.length}/${payload.events.length} events failed`
-          );
-        }
+        const telemetryIndexName = buildDailyIndexName(XDR_TELEMETRY_INDEX_PREFIX);
+        await indexBatch(context, payload, payload.events, telemetryIndexName, 'telemetry');
 
         const indexed = payload.events.length;
-        logger.debug(
-          `Indexed ${indexed} telemetry events from agent [${payload.agent_id}] into [${indexName}]`
-        );
+        const message = `${indexed} events indexed into ${telemetryIndexName}`;
+        logger.debug(`Indexed ${indexed} telemetry events from agent [${payload.agent_id}]`);
 
         const body: ControlPlaneTelemetryResponse = {
           indexed,
-          message: `${indexed} events indexed into ${indexName}`,
+          telemetry_indexed: indexed,
+          message,
         };
 
         return response.ok({ body });
@@ -929,6 +959,117 @@ export function defineRoutes(
           statusCode: 502,
           body: {
             message: `Failed to index telemetry events: ${err}`,
+          },
+        });
+      }
+    }
+  );
+
+  router.post(
+    {
+      path: '/api/v1/agents/security',
+      validate: {
+        body: schema.object({
+          agent_id: schema.string({ minLength: 1 }),
+          events: schema.arrayOf(telemetryEventSchema, { minSize: 1, maxSize: 5000 }),
+        }),
+      },
+      options: {
+        authRequired: false,
+      },
+    },
+    async (context, request, response) => {
+      const payload = request.body as ControlPlaneTelemetryRequest;
+
+      if (removedAgentIds.has(payload.agent_id)) {
+        return response.unauthorized({
+          body: { message: `Agent [${payload.agent_id}] has been removed` },
+        });
+      }
+
+      const nonSecurityCount = payload.events.filter((evt) => !isSecurityEvent(evt)).length;
+      if (nonSecurityCount > 0) {
+        return response.badRequest({
+          body: {
+            message: `${nonSecurityCount} non-security events received on security endpoint; send them to /api/v1/agents/telemetry`,
+          },
+        });
+      }
+
+      try {
+        const securityIndexName = buildDailyIndexName(XDR_SECURITY_INDEX_PREFIX);
+        await indexBatch(context, payload, payload.events, securityIndexName, 'security');
+
+        const indexed = payload.events.length;
+        const body: ControlPlaneTelemetryResponse = {
+          indexed,
+          security_indexed: indexed,
+          message: `${indexed} events indexed into ${securityIndexName}`,
+        };
+
+        logger.debug(`Indexed ${indexed} security events from agent [${payload.agent_id}]`);
+        return response.ok({ body });
+      } catch (err) {
+        logger.error(`Failed to index security events: ${err}`);
+        return response.customError({
+          statusCode: 502,
+          body: {
+            message: `Failed to index security events: ${err}`,
+          },
+        });
+      }
+    }
+  );
+
+  router.post(
+    {
+      path: '/api/v1/agents/logs',
+      validate: {
+        body: schema.object({
+          agent_id: schema.string({ minLength: 1 }),
+          events: schema.arrayOf(telemetryEventSchema, { minSize: 1, maxSize: 5000 }),
+        }),
+      },
+      options: {
+        authRequired: false,
+      },
+    },
+    async (context, request, response) => {
+      const payload = request.body as ControlPlaneTelemetryRequest;
+
+      if (removedAgentIds.has(payload.agent_id)) {
+        return response.unauthorized({
+          body: { message: `Agent [${payload.agent_id}] has been removed` },
+        });
+      }
+
+      const nonLogCount = payload.events.filter((evt) => !isAgentLogEvent(evt)).length;
+      if (nonLogCount > 0) {
+        return response.badRequest({
+          body: {
+            message: `${nonLogCount} non-log events received on logs endpoint; send telemetry to /api/v1/agents/telemetry and security alerts to /api/v1/agents/security`,
+          },
+        });
+      }
+
+      try {
+        const logsIndexName = buildDailyIndexName(XDR_LOGS_INDEX_PREFIX);
+        await indexBatch(context, payload, payload.events, logsIndexName, 'logs');
+
+        const indexed = payload.events.length;
+        const body: ControlPlaneTelemetryResponse = {
+          indexed,
+          message: `${indexed} events indexed into ${logsIndexName}`,
+        };
+
+        logger.debug(`Indexed ${indexed} agent logs from agent [${payload.agent_id}]`);
+        return response.ok({ body });
+      } catch (err) {
+        logger.error(`Failed to index log events: ${err}`);
+        return response.customError({
+          statusCode: 502,
+          body: {
+            message: `Failed to index log events: ${err}`,
           },
         });
       }

@@ -9,6 +9,8 @@ import {
 import { defineRoutes } from './routes';
 import { installTelemetryDashboard } from './telemetry_dashboard_installer';
 import { installTelemetryIsmPolicy } from './telemetry_ism_installer';
+import { installSecurityIsmPolicy } from './security_ism_installer';
+import { installAgentLogsIsmPolicy } from './logs_ism_installer';
 import { XdrManagerPluginSetup, XdrManagerPluginStart } from './types';
 import { XDR_AGENT_SAVED_OBJECT_TYPE, XDR_ENROLLMENT_TOKEN_SAVED_OBJECT_TYPE } from '../common';
 
@@ -88,6 +90,16 @@ export class XdrManagerPlugin implements Plugin<XdrManagerPluginSetup, XdrManage
     const opensearchClient = core.opensearch.client.asInternalUser;
     installTelemetryIsmPolicy(opensearchClient, this.logger).catch((err) =>
       this.logger.error(`xdr_manager: ISM policy install failed: ${err}`)
+    );
+
+    // Install ISM policy (90-day retention) and index template for security indices
+    installSecurityIsmPolicy(opensearchClient, this.logger).catch((err) =>
+      this.logger.error(`xdr_manager: security ISM policy install failed: ${err}`)
+    );
+
+    // Install ISM policy and index template for agent logs indices
+    installAgentLogsIsmPolicy(opensearchClient, this.logger).catch((err) =>
+      this.logger.error(`xdr_manager: logs ISM policy install failed: ${err}`)
     );
 
     return {};
