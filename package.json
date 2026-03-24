@@ -1,15 +1,15 @@
 {
-  "name": "opensearch_xdr_manager",
-  "version": "0.1.0",
-  "description": "OpenSearch Dashboards plugin for XDR Manager",
+  "name": "xdr-coordinator",
+  "version": "0.4.0",
+  "description": "OpenSearch Dashboards plugin for XDR Coordinator",
   "main": "index.js",
   "license": "Non-commercial. Provided for legal review purposes only. Subject to change.",
   "private": true,
   "scripts": {
     "version:sync": "node ./scripts/sync_version.js",
     "prebuild": "yarn version:sync",
-    "build": "yarn plugin-helpers build",
-    "plugin-helpers": "node ../../scripts/plugin_helpers",
-    "osd": "node ../../scripts/osd"
+    "build": "bash ./scripts/build_external.sh",
+    "plugin-helpers": "node ../OpenSearch-Dashboards/scripts/plugin_helpers",
+    "osd": "node ../OpenSearch-Dashboards/scripts/osd"
   }
 }

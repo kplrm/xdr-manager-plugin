@@ -40,14 +40,14 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ data }) => {
   if (!data || data.connections.length === 0) {
     return (
       <EuiCallOut
-        title={i18n.translate('xdrManager.telemetry.network.noData', {
+        title={i18n.translate('xdrCoordinator.telemetry.network.noData', {
           defaultMessage: 'No network telemetry data available',
         })}
         iconType="iInCircle"
         color="primary"
       >
         <p>
-          {i18n.translate('xdrManager.telemetry.network.noDataDescription', {
+          {i18n.translate('xdrCoordinator.telemetry.network.noDataDescription', {
             defaultMessage:
               'Network events will appear here once enrolled agents start sending network telemetry.',
           })}
@@ -69,7 +69,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ data }) => {
   const columns = [
     {
       field: 'direction',
-      name: i18n.translate('xdrManager.telemetry.network.col.direction', {
+      name: i18n.translate('xdrCoordinator.telemetry.network.col.direction', {
         defaultMessage: 'Direction',
       }),
       width: '120px',
@@ -81,7 +81,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ data }) => {
       ),
     },
     {
-      name: i18n.translate('xdrManager.telemetry.network.col.local', {
+      name: i18n.translate('xdrCoordinator.telemetry.network.col.local', {
         defaultMessage: 'Local',
       }),
       width: '200px',
@@ -89,7 +89,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ data }) => {
         `${conn.local_addr}:${conn.local_port}`,
     },
     {
-      name: i18n.translate('xdrManager.telemetry.network.col.remote', {
+      name: i18n.translate('xdrCoordinator.telemetry.network.col.remote', {
         defaultMessage: 'Remote',
       }),
       width: '200px',
@@ -98,7 +98,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ data }) => {
     },
     {
       field: 'protocol',
-      name: i18n.translate('xdrManager.telemetry.network.col.protocol', {
+      name: i18n.translate('xdrCoordinator.telemetry.network.col.protocol', {
         defaultMessage: 'Protocol',
       }),
       width: '90px',
@@ -109,7 +109,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ data }) => {
     },
     {
       field: 'state',
-      name: i18n.translate('xdrManager.telemetry.network.col.state', {
+      name: i18n.translate('xdrCoordinator.telemetry.network.col.state', {
         defaultMessage: 'State',
       }),
       width: '130px',
@@ -120,7 +120,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ data }) => {
     },
     {
       field: 'event_type',
-      name: i18n.translate('xdrManager.telemetry.network.col.eventType', {
+      name: i18n.translate('xdrCoordinator.telemetry.network.col.eventType', {
         defaultMessage: 'Event',
       }),
       width: '200px',
@@ -128,7 +128,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ data }) => {
     },
     {
       field: 'timestamp',
-      name: i18n.translate('xdrManager.telemetry.network.col.timestamp', {
+      name: i18n.translate('xdrCoordinator.telemetry.network.col.timestamp', {
         defaultMessage: 'Time',
       }),
       width: '160px',
@@ -146,7 +146,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ data }) => {
             <EuiStat
               title={String(data.summary.total)}
               description={i18n.translate(
-                'xdrManager.telemetry.network.totalConnections',
+                'xdrCoordinator.telemetry.network.totalConnections',
                 { defaultMessage: 'Total Connections' }
               )}
               titleColor="primary"
@@ -158,7 +158,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ data }) => {
           <EuiPanel paddingSize="m" hasBorder>
             <EuiStat
               title={String(data.summary.inbound)}
-              description={i18n.translate('xdrManager.telemetry.network.inbound', {
+              description={i18n.translate('xdrCoordinator.telemetry.network.inbound', {
                 defaultMessage: '↓ Inbound',
               })}
               titleColor="secondary"
@@ -170,7 +170,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ data }) => {
           <EuiPanel paddingSize="m" hasBorder>
             <EuiStat
               title={String(data.summary.outbound)}
-              description={i18n.translate('xdrManager.telemetry.network.outbound', {
+              description={i18n.translate('xdrCoordinator.telemetry.network.outbound', {
                 defaultMessage: '↑ Outbound',
               })}
               titleColor="accent"
@@ -188,7 +188,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ data }) => {
           <EuiPanel paddingSize="m" hasBorder>
             <EuiTitle size="xs">
               <h3>
-                {i18n.translate('xdrManager.telemetry.network.protocolDist', {
+                {i18n.translate('xdrCoordinator.telemetry.network.protocolDist', {
                   defaultMessage: 'Protocols',
                 })}
               </h3>
@@ -209,7 +209,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ data }) => {
           <EuiPanel paddingSize="m" hasBorder>
             <EuiTitle size="xs">
               <h3>
-                {i18n.translate('xdrManager.telemetry.network.stateDist', {
+                {i18n.translate('xdrCoordinator.telemetry.network.stateDist', {
                   defaultMessage: 'Connection States',
                 })}
               </h3>
@@ -234,7 +234,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({ data }) => {
       <EuiPanel paddingSize="m" hasBorder>
         <EuiTitle size="xs">
           <h3>
-            {i18n.translate('xdrManager.telemetry.network.recentConnections', {
+            {i18n.translate('xdrCoordinator.telemetry.network.recentConnections', {
               defaultMessage: 'Recent Connections',
             })}
           </h3>

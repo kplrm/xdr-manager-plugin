@@ -3,7 +3,7 @@
  * events stored under `.xdr-agent-security-*`.
  */
 
-import { Logger } from '../../../src/core/server';
+import { Logger } from '../../OpenSearch-Dashboards/src/core/server';
 
 const ISM_POLICY_ID = 'xdr-security-retention';
 const INDEX_TEMPLATE_NAME = 'xdr-security-template';

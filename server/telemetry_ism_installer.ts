@@ -9,7 +9,7 @@
  * policy / template already exist.
  */
 
-import { Logger } from '../../../src/core/server';
+import { Logger } from '../../OpenSearch-Dashboards/src/core/server';
 
 const ISM_POLICY_ID = 'xdr-telemetry-retention';
 const INDEX_TEMPLATE_NAME = 'xdr-telemetry-template';

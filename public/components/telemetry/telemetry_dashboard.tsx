@@ -12,7 +12,7 @@ import {
   EuiText,
 } from '@elastic/eui';
 import { i18n } from '@osd/i18n';
-import { CoreStart } from '../../../../../src/core/public';
+import { CoreStart } from '../../../../OpenSearch-Dashboards/src/core/public';
 import {
   TelemetryHostResponse,
   TelemetryProcessResponse,
@@ -73,7 +73,7 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
         setError(msg);
         if (showErrors) {
           notifications.toasts.addDanger({
-            title: i18n.translate('xdrManager.telemetry.fetchError', {
+            title: i18n.translate('xdrCoordinator.telemetry.fetchError', {
               defaultMessage: 'Unable to load telemetry data',
             }),
             text: msg,
@@ -109,7 +109,7 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
         <EuiFlexItem grow={false}>
           <EuiText size="s" color="subdued">
             <p>
-              {i18n.translate('xdrManager.telemetry.description', {
+              {i18n.translate('xdrCoordinator.telemetry.description', {
                 defaultMessage:
                   'Real-time endpoint telemetry from enrolled XDR agents. Data refreshes every 30 seconds.',
               })}
@@ -123,7 +123,7 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
             onClick={() => fetchData()}
             isLoading={isLoading}
           >
-            {i18n.translate('xdrManager.telemetry.refresh', {
+            {i18n.translate('xdrCoordinator.telemetry.refresh', {
               defaultMessage: 'Refresh',
             })}
           </EuiButtonEmpty>
@@ -134,17 +134,17 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
 
       <EuiTabs size="s">
         <EuiTab onClick={() => setSubTab('host')} isSelected={subTab === 'host'}>
-          {i18n.translate('xdrManager.telemetry.tab.host', {
+          {i18n.translate('xdrCoordinator.telemetry.tab.host', {
             defaultMessage: 'Host',
           })}
         </EuiTab>
         <EuiTab onClick={() => setSubTab('process')} isSelected={subTab === 'process'}>
-          {i18n.translate('xdrManager.telemetry.tab.process', {
+          {i18n.translate('xdrCoordinator.telemetry.tab.process', {
             defaultMessage: 'Processes',
           })}
         </EuiTab>
         <EuiTab onClick={() => setSubTab('network')} isSelected={subTab === 'network'}>
-          {i18n.translate('xdrManager.telemetry.tab.network', {
+          {i18n.translate('xdrCoordinator.telemetry.tab.network', {
             defaultMessage: 'Network',
           })}
         </EuiTab>
@@ -155,7 +155,7 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
       {error && (
         <>
           <EuiCallOut
-            title={i18n.translate('xdrManager.telemetry.error', {
+            title={i18n.translate('xdrCoordinator.telemetry.error', {
               defaultMessage: 'Error loading telemetry',
             })}
             color="danger"

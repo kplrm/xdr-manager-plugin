@@ -35,7 +35,7 @@ import {
 } from '@elastic/eui';
 import { i18n } from '@osd/i18n';
 import { BrowserRouter as Router } from 'react-router-dom';
-import { CoreStart } from '../../../../src/core/public';
+import { CoreStart } from '../../../OpenSearch-Dashboards/src/core/public';
 import {
   EnrollmentTokenStatusResponse,
   GenerateEnrollmentTokenResponse,
@@ -66,7 +66,7 @@ const statusColorMap: Record<string, 'success' | 'warning' | 'danger' | 'hollow'
 const formatLastSeenAgo = (lastSeen: string, nowMs: number): string => {
   const lastSeenMs = Date.parse(lastSeen);
   if (!Number.isFinite(lastSeenMs)) {
-    return i18n.translate('xdrManager.lastSeen.unknown', {
+    return i18n.translate('xdrCoordinator.lastSeen.unknown', {
       defaultMessage: 'unknown',
     });
   }
@@ -74,7 +74,7 @@ const formatLastSeenAgo = (lastSeen: string, nowMs: number): string => {
   const diffSeconds = Math.max(0, Math.floor((nowMs - lastSeenMs) / 1000));
 
   if (diffSeconds < 60) {
-    return i18n.translate('xdrManager.lastSeen.secondsAgo', {
+    return i18n.translate('xdrCoordinator.lastSeen.secondsAgo', {
       defaultMessage: '{count} sec ago',
       values: { count: diffSeconds },
     });
@@ -82,7 +82,7 @@ const formatLastSeenAgo = (lastSeen: string, nowMs: number): string => {
 
   const diffMinutes = Math.floor(diffSeconds / 60);
   if (diffMinutes < 60) {
-    return i18n.translate('xdrManager.lastSeen.minutesAgo', {
+    return i18n.translate('xdrCoordinator.lastSeen.minutesAgo', {
       defaultMessage: '{count} min ago',
       values: { count: diffMinutes },
     });
@@ -90,7 +90,7 @@ const formatLastSeenAgo = (lastSeen: string, nowMs: number): string => {
 
   const diffHours = Math.floor(diffMinutes / 60);
   if (diffHours < 24) {
-    return i18n.translate('xdrManager.lastSeen.hoursAgo', {
+    return i18n.translate('xdrCoordinator.lastSeen.hoursAgo', {
       defaultMessage: '{count} hr ago',
       values: { count: diffHours },
     });
@@ -98,7 +98,7 @@ const formatLastSeenAgo = (lastSeen: string, nowMs: number): string => {
 
   const diffDays = Math.floor(diffHours / 24);
   const dayUnit = diffDays === 1 ? 'day' : 'days';
-  return i18n.translate('xdrManager.lastSeen.daysAgo', {
+  return i18n.translate('xdrCoordinator.lastSeen.daysAgo', {
     defaultMessage: '{count} {unit} ago',
     values: { count: diffDays, unit: dayUnit },
   });
@@ -173,7 +173,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
     } catch (error) {
       if (showErrorToast) {
         notifications.toasts.addDanger({
-          title: i18n.translate('xdrManager.loadDataError', {
+          title: i18n.translate('xdrCoordinator.loadDataError', {
             defaultMessage: 'Unable to load XDR data',
           }),
           text: error instanceof Error ? error.message : String(error),
@@ -191,7 +191,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
       setEnrollmentTokensList(response.tokens);
     } catch (error) {
       notifications.toasts.addDanger({
-        title: i18n.translate('xdrManager.loadTokensError', {
+        title: i18n.translate('xdrCoordinator.loadTokensError', {
           defaultMessage: 'Unable to load enrollment tokens',
         }),
         text: error instanceof Error ? error.message : String(error),
@@ -204,7 +204,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
   const removeAgent = useCallback(
     async (agent: XdrAgent) => {
       const confirmed = window.confirm(
-        i18n.translate('xdrManager.removeAgentConfirm', {
+        i18n.translate('xdrCoordinator.removeAgentConfirm', {
           defaultMessage:
             'Remove agent "{name}"? The plugin will forget this agent and further heartbeats and telemetry from it will be rejected.',
           values: { name: agent.name },
@@ -218,7 +218,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
       try {
         await http.delete(`/api/xdr_manager/agents/${agent.id}`);
         notifications.toasts.addSuccess(
-          i18n.translate('xdrManager.agentRemoved', {
+          i18n.translate('xdrCoordinator.agentRemoved', {
             defaultMessage: 'Agent "{name}" removed.',
             values: { name: agent.name },
           })
@@ -226,7 +226,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
         await loadData();
       } catch (error) {
         notifications.toasts.addDanger({
-          title: i18n.translate('xdrManager.removeAgentError', {
+          title: i18n.translate('xdrCoordinator.removeAgentError', {
             defaultMessage: 'Unable to remove agent',
           }),
           text: error instanceof Error ? error.message : String(error),
@@ -347,7 +347,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
   const generateEnrollmentToken = useCallback(async () => {
     if (!policyId) {
       notifications.toasts.addWarning(
-        i18n.translate('xdrManager.policyRequiredForToken', {
+        i18n.translate('xdrCoordinator.policyRequiredForToken', {
           defaultMessage: 'Select a policy before generating an enrollment token.',
         })
       );
@@ -366,13 +366,13 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
       setTokenValidationStatus('waiting');
 
       notifications.toasts.addSuccess(
-        i18n.translate('xdrManager.generateEnrollmentTokenSuccess', {
+        i18n.translate('xdrCoordinator.generateEnrollmentTokenSuccess', {
           defaultMessage: 'Enrollment token generated. Use it in xdr-agent enrollment_token.',
         })
       );
     } catch (error) {
       notifications.toasts.addDanger({
-        title: i18n.translate('xdrManager.generateEnrollmentTokenError', {
+        title: i18n.translate('xdrCoordinator.generateEnrollmentTokenError', {
           defaultMessage: 'Unable to generate enrollment token',
         }),
         text: error instanceof Error ? error.message : String(error),
@@ -449,7 +449,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
   const savePolicy = useCallback(async () => {
     if (!policyNameInput.trim() || !policyDescriptionInput.trim()) {
       notifications.toasts.addWarning(
-        i18n.translate('xdrManager.policyValidation', {
+        i18n.translate('xdrCoordinator.policyValidation', {
           defaultMessage: 'Policy name and description are required.',
         })
       );
@@ -471,14 +471,14 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
       if (editingPolicyId) {
         await http.put<UpsertPolicyResponse>(`/api/xdr_manager/policies/${editingPolicyId}`, { body });
         notifications.toasts.addSuccess(
-          i18n.translate('xdrManager.policyUpdated', {
+          i18n.translate('xdrCoordinator.policyUpdated', {
             defaultMessage: 'Policy updated.',
           })
         );
       } else {
         await http.post<UpsertPolicyResponse>('/api/xdr_manager/policies', { body });
         notifications.toasts.addSuccess(
-          i18n.translate('xdrManager.policyCreated', {
+          i18n.translate('xdrCoordinator.policyCreated', {
             defaultMessage: 'Policy created.',
           })
         );
@@ -488,7 +488,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
       await loadData();
     } catch (error) {
       notifications.toasts.addDanger({
-        title: i18n.translate('xdrManager.policySaveError', {
+        title: i18n.translate('xdrCoordinator.policySaveError', {
           defaultMessage: 'Unable to save policy',
         }),
         text: error instanceof Error ? error.message : String(error),
@@ -513,7 +513,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
   const deletePolicy = useCallback(
     async (policy: XdrPolicy) => {
       const confirmed = window.confirm(
-        i18n.translate('xdrManager.policyDeleteConfirm', {
+        i18n.translate('xdrCoordinator.policyDeleteConfirm', {
           defaultMessage: 'Delete policy {name}? This only works when no agents are assigned.',
           values: { name: policy.name },
         })
@@ -526,14 +526,14 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
       try {
         await http.delete(`/api/xdr_manager/policies/${policy.id}`);
         notifications.toasts.addSuccess(
-          i18n.translate('xdrManager.policyDeleted', {
+          i18n.translate('xdrCoordinator.policyDeleted', {
             defaultMessage: 'Policy deleted.',
           })
         );
         await loadData();
       } catch (error) {
         notifications.toasts.addDanger({
-          title: i18n.translate('xdrManager.policyDeleteError', {
+          title: i18n.translate('xdrCoordinator.policyDeleteError', {
             defaultMessage: 'Unable to delete policy',
           }),
           text: error instanceof Error ? error.message : String(error),
@@ -546,20 +546,20 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
   const columns = [
     {
       field: 'name',
-      name: i18n.translate('xdrManager.column.name', { defaultMessage: 'Agent' }),
+      name: i18n.translate('xdrCoordinator.column.name', { defaultMessage: 'Agent' }),
     },
     {
-      name: i18n.translate('xdrManager.column.policy', { defaultMessage: 'Policy' }),
+      name: i18n.translate('xdrCoordinator.column.policy', { defaultMessage: 'Policy' }),
       render: (agent: XdrAgent) => policyNameById[agent.policyId] ?? agent.policyId,
     },
     {
       field: 'status',
-      name: i18n.translate('xdrManager.column.status', { defaultMessage: 'Status' }),
+      name: i18n.translate('xdrCoordinator.column.status', { defaultMessage: 'Status' }),
       render: (status: string) => <EuiBadge color={statusColorMap[status] ?? 'hollow'}>{status}</EuiBadge>,
     },
     {
       field: 'version',
-      name: i18n.translate('xdrManager.column.version', { defaultMessage: 'Version' }),
+      name: i18n.translate('xdrCoordinator.column.version', { defaultMessage: 'Version' }),
       render: (version: string) => {
         const hasUpgrade = latestVersion && version !== latestVersion;
         return (
@@ -568,7 +568,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
             {hasUpgrade && (
               <EuiFlexItem grow={false}>
                 <EuiBadge color="warning">
-                  {i18n.translate('xdrManager.upgradeAvailable', {
+                  {i18n.translate('xdrCoordinator.upgradeAvailable', {
                     defaultMessage: 'v{latest} available',
                     values: { latest: latestVersion },
                   })}
@@ -581,15 +581,15 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
     },
     {
       field: 'lastSeen',
-      name: i18n.translate('xdrManager.column.lastSeen', { defaultMessage: 'Last seen' }),
+      name: i18n.translate('xdrCoordinator.column.lastSeen', { defaultMessage: 'Last seen' }),
       render: (lastSeen: string) => formatLastSeenAgo(lastSeen, nowMs),
     },
     {
-      name: i18n.translate('xdrManager.column.tags', { defaultMessage: 'Tags' }),
+      name: i18n.translate('xdrCoordinator.column.tags', { defaultMessage: 'Tags' }),
       render: (agent: XdrAgent) => agent.tags.join(', '),
     },
     {
-      name: i18n.translate('xdrManager.column.actions', { defaultMessage: 'Actions' }),
+      name: i18n.translate('xdrCoordinator.column.actions', { defaultMessage: 'Actions' }),
       width: '240px',
       render: (agent: XdrAgent) => {
         // Disabled only when we positively know the agent is already on the latest version.
@@ -604,19 +604,19 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
         const upgradeError = upgradeErrorByAgentId[agent.id];
 
         const upgradeTooltip = isQueued
-          ? i18n.translate('xdrManager.action.upgradeTooltipQueued', {
+          ? i18n.translate('xdrCoordinator.action.upgradeTooltipQueued', {
               defaultMessage: 'Upgrade command queued — waiting for the agent to pick it up on its next heartbeat',
             })
           : alreadyLatest
-          ? i18n.translate('xdrManager.action.upgradeTooltipCurrent', {
+          ? i18n.translate('xdrCoordinator.action.upgradeTooltipCurrent', {
               defaultMessage: 'Agent is already on the latest version',
             })
           : latestVersion
-          ? i18n.translate('xdrManager.action.upgradeTooltip', {
+          ? i18n.translate('xdrCoordinator.action.upgradeTooltip', {
               defaultMessage: 'Upgrade to v{version}',
               values: { version: latestVersion },
             })
-          : i18n.translate('xdrManager.action.upgradeTooltipUnknown', {
+          : i18n.translate('xdrCoordinator.action.upgradeTooltipUnknown', {
               defaultMessage: 'Queue upgrade — target version will be resolved at next heartbeat',
             });
 
@@ -634,8 +634,8 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                     onClick={() => runAction(agent.id, 'upgrade')}
                   >
                     {isQueued
-                      ? i18n.translate('xdrManager.action.upgradeQueued', { defaultMessage: 'Queued' })
-                      : i18n.translate('xdrManager.action.upgrade', { defaultMessage: 'Upgrade' })}
+                      ? i18n.translate('xdrCoordinator.action.upgradeQueued', { defaultMessage: 'Queued' })
+                      : i18n.translate('xdrCoordinator.action.upgrade', { defaultMessage: 'Upgrade' })}
                   </EuiButtonEmpty>
                 </span>
               </EuiToolTip>
@@ -648,7 +648,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
               <EuiFlexItem grow={false}>
                 <EuiToolTip
                   position="top"
-                  content={i18n.translate('xdrManager.action.upgradeConfirmedTooltip', {
+                  content={i18n.translate('xdrCoordinator.action.upgradeConfirmedTooltip', {
                     defaultMessage: 'Agent successfully upgraded to v{version}',
                     values: { version: latestVersion },
                   })}
@@ -658,7 +658,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                       type="checkInCircleFilled"
                       color="success"
                       size="m"
-                      aria-label={i18n.translate('xdrManager.action.upgradeConfirmedAriaLabel', {
+                      aria-label={i18n.translate('xdrCoordinator.action.upgradeConfirmedAriaLabel', {
                         defaultMessage: 'Upgrade confirmed',
                       })}
                     />
@@ -676,7 +676,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                   content={
                     <span>
                       <strong>
-                        {i18n.translate('xdrManager.action.upgradeFailed', {
+                        {i18n.translate('xdrCoordinator.action.upgradeFailed', {
                           defaultMessage: 'Upgrade failed:',
                         })}
                       </strong>{' '}
@@ -690,7 +690,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                       color="danger"
                       size="m"
                       style={{ cursor: 'help' }}
-                      aria-label={i18n.translate('xdrManager.action.upgradeFailedAriaLabel', {
+                      aria-label={i18n.translate('xdrCoordinator.action.upgradeFailedAriaLabel', {
                         defaultMessage: 'Upgrade failed',
                       })}
                     />
@@ -701,7 +701,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
 
             <EuiFlexItem grow={false}>
               <EuiButtonEmpty size="xs" color="danger" onClick={() => removeAgent(agent)}>
-                {i18n.translate('xdrManager.action.remove', { defaultMessage: 'Remove' })}
+                {i18n.translate('xdrCoordinator.action.remove', { defaultMessage: 'Remove' })}
               </EuiButtonEmpty>
             </EuiFlexItem>
           </EuiFlexGroup>
@@ -713,19 +713,19 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
   const policyColumns = [
     {
       field: 'name',
-      name: i18n.translate('xdrManager.policyColumn.name', { defaultMessage: 'Policy' }),
+      name: i18n.translate('xdrCoordinator.policyColumn.name', { defaultMessage: 'Policy' }),
     },
     {
       field: 'description',
-      name: i18n.translate('xdrManager.policyColumn.description', { defaultMessage: 'Description' }),
+      name: i18n.translate('xdrCoordinator.policyColumn.description', { defaultMessage: 'Description' }),
     },
     {
       field: 'logLevel',
-      name: i18n.translate('xdrManager.policyColumn.logLevel', { defaultMessage: 'Log level' }),
+      name: i18n.translate('xdrCoordinator.policyColumn.logLevel', { defaultMessage: 'Log level' }),
       render: (value: PolicyLogLevel) => <EuiBadge>{value}</EuiBadge>,
     },
     {
-      name: i18n.translate('xdrManager.policyColumn.protection', { defaultMessage: 'Protection controls' }),
+      name: i18n.translate('xdrCoordinator.policyColumn.protection', { defaultMessage: 'Protection controls' }),
       render: (policy: XdrPolicy) => {
         const enabledFeatures = [
           policy.malwareProtection ? 'Malware' : null,
@@ -738,24 +738,24 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
       },
     },
     {
-      name: i18n.translate('xdrManager.policyColumn.assignedAgents', {
+      name: i18n.translate('xdrCoordinator.policyColumn.assignedAgents', {
         defaultMessage: 'Assigned agents',
       }),
       render: (policy: XdrPolicy) => agents.filter((agent) => agent.policyId === policy.id).length,
     },
     {
-      name: i18n.translate('xdrManager.policyColumn.actions', { defaultMessage: 'Actions' }),
+      name: i18n.translate('xdrCoordinator.policyColumn.actions', { defaultMessage: 'Actions' }),
       width: '160px',
       render: (policy: XdrPolicy) => (
         <EuiFlexGroup gutterSize="s" responsive={false}>
           <EuiFlexItem grow={false}>
             <EuiButtonEmpty size="xs" onClick={() => openEditPolicyFlyout(policy)}>
-              {i18n.translate('xdrManager.policyEdit', { defaultMessage: 'Edit' })}
+              {i18n.translate('xdrCoordinator.policyEdit', { defaultMessage: 'Edit' })}
             </EuiButtonEmpty>
           </EuiFlexItem>
           <EuiFlexItem grow={false}>
             <EuiButtonEmpty size="xs" color="danger" onClick={() => deletePolicy(policy)}>
-              {i18n.translate('xdrManager.policyDelete', { defaultMessage: 'Delete' })}
+              {i18n.translate('xdrCoordinator.policyDelete', { defaultMessage: 'Delete' })}
             </EuiButtonEmpty>
           </EuiFlexItem>
         </EuiFlexGroup>
@@ -766,7 +766,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
   const revokeEnrollmentToken = useCallback(
     async (token: XdrEnrollmentToken) => {
       const confirmed = window.confirm(
-        i18n.translate('xdrManager.revokeTokenConfirm', {
+        i18n.translate('xdrCoordinator.revokeTokenConfirm', {
           defaultMessage:
             'Revoke this enrollment token? It will no longer be accepted for enrollment.',
         })
@@ -775,14 +775,14 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
       try {
         await http.delete(`/api/xdr_manager/enrollment_tokens/${encodeURIComponent(token.token)}`);
         notifications.toasts.addSuccess(
-          i18n.translate('xdrManager.tokenRevoked', {
+          i18n.translate('xdrCoordinator.tokenRevoked', {
             defaultMessage: 'Enrollment token revoked.',
           })
         );
         await loadEnrollmentTokens();
       } catch (error) {
         notifications.toasts.addDanger({
-          title: i18n.translate('xdrManager.revokeTokenError', {
+          title: i18n.translate('xdrCoordinator.revokeTokenError', {
             defaultMessage: 'Unable to revoke token',
           }),
           text: error instanceof Error ? error.message : String(error),
@@ -795,7 +795,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
   const tokenColumns = [
     {
       field: 'token' as const,
-      name: i18n.translate('xdrManager.tokenColumn.token', { defaultMessage: 'Token' }),
+      name: i18n.translate('xdrCoordinator.tokenColumn.token', { defaultMessage: 'Token' }),
       render: (_token: string, item: XdrEnrollmentToken) => (
         <EuiText size="s">
           <code style={{ fontFamily: 'monospace', fontSize: '0.8em', wordBreak: 'break-all' as const }}>
@@ -806,26 +806,26 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
     },
     {
       field: 'policyName' as const,
-      name: i18n.translate('xdrManager.tokenColumn.policy', { defaultMessage: 'Policy' }),
+      name: i18n.translate('xdrCoordinator.tokenColumn.policy', { defaultMessage: 'Policy' }),
     },
     {
       field: 'status' as const,
-      name: i18n.translate('xdrManager.tokenColumn.status', { defaultMessage: 'Status' }),
+      name: i18n.translate('xdrCoordinator.tokenColumn.status', { defaultMessage: 'Status' }),
       render: (status: string) => (
         <EuiBadge color={status === 'consumed' ? 'success' : 'primary'}>{status}</EuiBadge>
       ),
     },
     {
       field: 'createdAt' as const,
-      name: i18n.translate('xdrManager.tokenColumn.createdAt', { defaultMessage: 'Created' }),
+      name: i18n.translate('xdrCoordinator.tokenColumn.createdAt', { defaultMessage: 'Created' }),
       render: (ts: string) => new Date(ts).toLocaleString(),
     },
     {
-      name: i18n.translate('xdrManager.tokenColumn.actions', { defaultMessage: 'Actions' }),
+      name: i18n.translate('xdrCoordinator.tokenColumn.actions', { defaultMessage: 'Actions' }),
       width: '80px',
       render: (item: XdrEnrollmentToken) => (
         <EuiToolTip
-          content={i18n.translate('xdrManager.revokeTokenTooltip', {
+          content={i18n.translate('xdrCoordinator.revokeTokenTooltip', {
             defaultMessage: 'Revoke token',
           })}
         >
@@ -834,7 +834,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
             color="danger"
             iconType="trash"
             onClick={() => revokeEnrollmentToken(item)}
-            aria-label={i18n.translate('xdrManager.revokeTokenAriaLabel', {
+            aria-label={i18n.translate('xdrCoordinator.revokeTokenAriaLabel', {
               defaultMessage: 'Revoke token',
             })}
           />
@@ -896,11 +896,11 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
   const headerAction =
     activeTab === 'agents' ? (
       <EuiButton fill onClick={() => setIsEnrollFlyoutOpen(true)} key="enroll">
-        {i18n.translate('xdrManager.enrollButton', { defaultMessage: 'Enroll XDR' })}
+        {i18n.translate('xdrCoordinator.enrollButton', { defaultMessage: 'Enroll XDR' })}
       </EuiButton>
     ) : activeTab === 'policies' ? (
       <EuiButton fill onClick={openCreatePolicyFlyout} key="createPolicy">
-        {i18n.translate('xdrManager.createPolicy', { defaultMessage: 'Create policy' })}
+        {i18n.translate('xdrCoordinator.createPolicy', { defaultMessage: 'Create policy' })}
       </EuiButton>
     ) : null;
 
@@ -909,18 +909,18 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
       <EuiPage restrictWidth={1200}>
         <EuiPageBody component="main">
           <EuiPageHeader
-            pageTitle={i18n.translate('xdrManager.pageTitle', { defaultMessage: 'XDR Manager' })}
+            pageTitle={i18n.translate('xdrCoordinator.pageTitle', { defaultMessage: 'XDR Coordinator' })}
             rightSideItems={headerAction ? [headerAction] : []}
           />
 
           <EuiCallOut
-            title={i18n.translate('xdrManager.mdoTitle', {
+            title={i18n.translate('xdrCoordinator.mdoTitle', {
               defaultMessage: 'MVP mode: local in-memory control plane',
             })}
             iconType="iInCircle"
           >
             <p>
-              {i18n.translate('xdrManager.mvpDescription', {
+              {i18n.translate('xdrCoordinator.mvpDescription', {
                 defaultMessage:
                   'This MVP focuses on policy assignment, enroll simulation, and remote control actions so you can validate workflows before integrating a real agent transport.',
               })}
@@ -931,13 +931,13 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
 
           <EuiTabs>
             <EuiTab onClick={() => setActiveTab('agents')} isSelected={activeTab === 'agents'}>
-              {i18n.translate('xdrManager.tabAgents', { defaultMessage: 'Agents' })}
+              {i18n.translate('xdrCoordinator.tabAgents', { defaultMessage: 'Agents' })}
             </EuiTab>
             <EuiTab onClick={() => setActiveTab('policies')} isSelected={activeTab === 'policies'}>
-              {i18n.translate('xdrManager.tabPolicies', { defaultMessage: 'Policy management' })}
+              {i18n.translate('xdrCoordinator.tabPolicies', { defaultMessage: 'Policy management' })}
             </EuiTab>
             <EuiTab onClick={() => setActiveTab('tokens')} isSelected={activeTab === 'tokens'}>
-              {i18n.translate('xdrManager.tabTokens', { defaultMessage: 'Enrollment tokens' })}
+              {i18n.translate('xdrCoordinator.tabTokens', { defaultMessage: 'Enrollment tokens' })}
             </EuiTab>
           </EuiTabs>
 
@@ -951,7 +951,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                   setAgentSearchQuery(event.target.value);
                   setAgentPageIndex(0);
                 }}
-                placeholder={i18n.translate('xdrManager.searchPlaceholder', { defaultMessage: 'Search...' })}
+                placeholder={i18n.translate('xdrCoordinator.searchPlaceholder', { defaultMessage: 'Search...' })}
                 fullWidth
               />
 
@@ -978,7 +978,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                     <EuiFlexItem grow={false}>
                       <EuiText size="s">
                         <span>
-                          {i18n.translate('xdrManager.rowsPerPage', { defaultMessage: 'Rows per page' })}
+                          {i18n.translate('xdrCoordinator.rowsPerPage', { defaultMessage: 'Rows per page' })}
                         </span>
                       </EuiText>
                     </EuiFlexItem>
@@ -1011,7 +1011,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
             <EuiPanel>
               <EuiText size="s" color="subdued">
                 <p>
-                  {i18n.translate('xdrManager.policySectionDescription', {
+                  {i18n.translate('xdrCoordinator.policySectionDescription', {
                     defaultMessage:
                       'Define endpoint behavior profiles: protection controls, telemetry verbosity, and upgrade posture.',
                   })}
@@ -1041,7 +1041,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                     <EuiFlexItem grow={false}>
                       <EuiText size="s">
                         <span>
-                          {i18n.translate('xdrManager.rowsPerPage', { defaultMessage: 'Rows per page' })}
+                          {i18n.translate('xdrCoordinator.rowsPerPage', { defaultMessage: 'Rows per page' })}
                         </span>
                       </EuiText>
                     </EuiFlexItem>
@@ -1074,7 +1074,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
             <EuiPanel>
               <EuiText size="s" color="subdued">
                 <p>
-                  {i18n.translate('xdrManager.tokensSectionDescription', {
+                  {i18n.translate('xdrCoordinator.tokensSectionDescription', {
                     defaultMessage:
                       'Enrollment tokens authorise new agents to join. Only agents that enrolled with a valid token are accepted. Pending tokens have not yet been consumed by an agent.',
                   })}
@@ -1089,7 +1089,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                 onClick={loadEnrollmentTokens}
                 isLoading={isLoadingTokens}
               >
-                {i18n.translate('xdrManager.tokensRefresh', { defaultMessage: 'Refresh' })}
+                {i18n.translate('xdrCoordinator.tokensRefresh', { defaultMessage: 'Refresh' })}
               </EuiButton>
 
               <EuiSpacer size="m" />
@@ -1110,7 +1110,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                   <EuiSpacer size="m" />
                   <EuiText size="s" color="subdued" textAlign="center">
                     <p>
-                      {i18n.translate('xdrManager.noTokens', {
+                      {i18n.translate('xdrCoordinator.noTokens', {
                         defaultMessage: 'No enrollment tokens yet. Generate one from the Agents tab.',
                       })}
                     </p>
@@ -1125,14 +1125,14 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
               <EuiFlyoutHeader hasBorder>
                 <EuiTitle size="m">
                   <h2>
-                    {i18n.translate('xdrManager.enrollFlyoutTitle', {
+                    {i18n.translate('xdrCoordinator.enrollFlyoutTitle', {
                       defaultMessage: 'Enroll new XDR',
                     })}
                   </h2>
                 </EuiTitle>
                 <EuiText size="s" color="subdued">
                   <p>
-                    {i18n.translate('xdrManager.enrollFlyoutSubtitle', {
+                    {i18n.translate('xdrCoordinator.enrollFlyoutSubtitle', {
                       defaultMessage: 'Fleet-inspired enrollment flow with policy mapping.',
                     })}
                   </p>
@@ -1142,7 +1142,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
               <EuiFlyoutBody>
                 <EuiForm component="form">
                   <EuiFormRow
-                    label={i18n.translate('xdrManager.field.policy', {
+                    label={i18n.translate('xdrCoordinator.field.policy', {
                       defaultMessage: 'Policy',
                     })}
                   >
@@ -1157,7 +1157,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                   </EuiFormRow>
 
                   <EuiFormRow
-                    label={i18n.translate('xdrManager.field.tags', {
+                    label={i18n.translate('xdrCoordinator.field.tags', {
                       defaultMessage: 'Tags (comma-separated)',
                     })}
                   >
@@ -1169,11 +1169,11 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                   </EuiFormRow>
 
                   <EuiFormRow
-                    label={i18n.translate('xdrManager.field.controlPlaneUrl', {
+                    label={i18n.translate('xdrCoordinator.field.controlPlaneUrl', {
                       defaultMessage: 'Control plane URL',
                     })}
-                    helpText={i18n.translate('xdrManager.field.controlPlaneUrlHelp', {
-                      defaultMessage: 'URL of this XDR Manager as reachable from the agent host.',
+                    helpText={i18n.translate('xdrCoordinator.field.controlPlaneUrlHelp', {
+                      defaultMessage: 'URL of this XDR Coordinator as reachable from the agent host.',
                     })}
                   >
                     <EuiFieldText
@@ -1186,10 +1186,10 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                   <EuiHorizontalRule margin="m" />
 
                   <EuiFormRow
-                    label={i18n.translate('xdrManager.field.enrollmentToken', {
+                    label={i18n.translate('xdrCoordinator.field.enrollmentToken', {
                       defaultMessage: 'Enrollment token (for xdr-agent)',
                     })}
-                    helpText={i18n.translate('xdrManager.field.enrollmentTokenHelp', {
+                    helpText={i18n.translate('xdrCoordinator.field.enrollmentTokenHelp', {
                       defaultMessage:
                         'Generate a token for the selected policy, then set it as enrollment_token in xdr-agent config.',
                     })}
@@ -1202,7 +1202,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                     isLoading={isGeneratingEnrollmentToken}
                     iconType="key"
                   >
-                    {i18n.translate('xdrManager.generateEnrollmentToken', {
+                    {i18n.translate('xdrCoordinator.generateEnrollmentToken', {
                       defaultMessage: 'Generate enrollment token',
                     })}
                   </EuiButton>
@@ -1213,10 +1213,10 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                       <EuiCallOut
                         title={
                           tokenValidationStatus === 'consumed'
-                            ? i18n.translate('xdrManager.tokenConsumedTitle', {
+                            ? i18n.translate('xdrCoordinator.tokenConsumedTitle', {
                                 defaultMessage: 'Agent enrolled',
                               })
-                            : i18n.translate('xdrManager.tokenWaitingTitle', {
+                            : i18n.translate('xdrCoordinator.tokenWaitingTitle', {
                                 defaultMessage: 'Waiting for enrollment',
                               })
                         }
@@ -1226,11 +1226,11 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                         <EuiText size="s" color="subdued">
                           <p>
                             {tokenValidationStatus === 'consumed'
-                              ? i18n.translate('xdrManager.tokenConsumedDetails', {
+                              ? i18n.translate('xdrCoordinator.tokenConsumedDetails', {
                                   defaultMessage: 'Enrollment completed for host {hostname}.',
                                   values: { hostname: tokenConsumedHostname || 'unknown' },
                                 })
-                              : i18n.translate('xdrManager.tokenWaitingDetails', {
+                              : i18n.translate('xdrCoordinator.tokenWaitingDetails', {
                                   defaultMessage:
                                     'Run xdr-agent enroll with this token. Validation updates automatically.',
                                 })}
@@ -1242,7 +1242,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                             <EuiLoadingSpinner size="m" />
                             <EuiSpacer size="s" />
                             <EuiButtonEmpty size="s" onClick={stopEnrollmentValidation}>
-                              {i18n.translate('xdrManager.stopEnrollmentValidation', {
+                              {i18n.translate('xdrCoordinator.stopEnrollmentValidation', {
                                 defaultMessage: 'Stop',
                               })}
                             </EuiButtonEmpty>
@@ -1251,7 +1251,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                         <EuiSpacer size="m" />
                         <EuiText size="s">
                           <strong>
-                            {i18n.translate('xdrManager.installInstructionTitle', {
+                            {i18n.translate('xdrCoordinator.installInstructionTitle', {
                               defaultMessage: 'Step 1 — Install xdr-agent',
                             })}
                           </strong>
@@ -1270,7 +1270,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                         <EuiSpacer size="m" />
                         <EuiText size="s">
                           <strong>
-                            {i18n.translate('xdrManager.enrollCommandTitle', {
+                            {i18n.translate('xdrCoordinator.enrollCommandTitle', {
                               defaultMessage: 'Step 2 — Enroll the agent',
                             })}
                           </strong>
@@ -1290,7 +1290,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
 
               <EuiFlyoutFooter>
                 <EuiButtonEmpty onClick={() => setIsEnrollFlyoutOpen(false)}>
-                  {i18n.translate('xdrManager.cancelButton', { defaultMessage: 'Cancel' })}
+                  {i18n.translate('xdrCoordinator.cancelButton', { defaultMessage: 'Cancel' })}
                 </EuiButtonEmpty>
               </EuiFlyoutFooter>
             </EuiFlyout>
@@ -1302,8 +1302,8 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                 <EuiTitle size="m">
                   <h2>
                     {editingPolicyId
-                      ? i18n.translate('xdrManager.editPolicyTitle', { defaultMessage: 'Edit policy' })
-                      : i18n.translate('xdrManager.createPolicyTitle', {
+                      ? i18n.translate('xdrCoordinator.editPolicyTitle', { defaultMessage: 'Edit policy' })
+                      : i18n.translate('xdrCoordinator.createPolicyTitle', {
                           defaultMessage: 'Create policy',
                         })}
                   </h2>
@@ -1313,7 +1313,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
               <EuiFlyoutBody>
                 <EuiForm component="form">
                   <EuiFormRow
-                    label={i18n.translate('xdrManager.policyField.name', {
+                    label={i18n.translate('xdrCoordinator.policyField.name', {
                       defaultMessage: 'Policy name',
                     })}
                   >
@@ -1325,7 +1325,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                   </EuiFormRow>
 
                   <EuiFormRow
-                    label={i18n.translate('xdrManager.policyField.description', {
+                    label={i18n.translate('xdrCoordinator.policyField.description', {
                       defaultMessage: 'Description',
                     })}
                   >
@@ -1337,7 +1337,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                   </EuiFormRow>
 
                   <EuiFormRow
-                    label={i18n.translate('xdrManager.policyField.logLevel', {
+                    label={i18n.translate('xdrCoordinator.policyField.logLevel', {
                       defaultMessage: 'Telemetry log level',
                     })}
                   >
@@ -1355,7 +1355,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                   <EuiHorizontalRule margin="m" />
 
                   <EuiSwitch
-                    label={i18n.translate('xdrManager.policyField.malware', {
+                    label={i18n.translate('xdrCoordinator.policyField.malware', {
                       defaultMessage: 'Malware prevention',
                     })}
                     checked={policyMalwareProtection}
@@ -1363,7 +1363,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                   />
                   <EuiSpacer size="s" />
                   <EuiSwitch
-                    label={i18n.translate('xdrManager.policyField.fim', {
+                    label={i18n.translate('xdrCoordinator.policyField.fim', {
                       defaultMessage: 'File integrity monitoring',
                     })}
                     checked={policyFileIntegrity}
@@ -1371,7 +1371,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                   />
                   <EuiSpacer size="s" />
                   <EuiSwitch
-                    label={i18n.translate('xdrManager.policyField.osquery', {
+                    label={i18n.translate('xdrCoordinator.policyField.osquery', {
                       defaultMessage: 'Osquery module',
                     })}
                     checked={policyOsqueryEnabled}
@@ -1379,7 +1379,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
                   />
                   <EuiSpacer size="s" />
                   <EuiSwitch
-                    label={i18n.translate('xdrManager.policyField.autoUpgrade', {
+                    label={i18n.translate('xdrCoordinator.policyField.autoUpgrade', {
                       defaultMessage: 'Auto-upgrade agents',
                     })}
                     checked={policyAutoUpgrade}
@@ -1390,10 +1390,10 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
 
               <EuiFlyoutFooter>
                 <EuiButtonEmpty onClick={() => setIsPolicyFlyoutOpen(false)}>
-                  {i18n.translate('xdrManager.cancelPolicyButton', { defaultMessage: 'Cancel' })}
+                  {i18n.translate('xdrCoordinator.cancelPolicyButton', { defaultMessage: 'Cancel' })}
                 </EuiButtonEmpty>
                 <EuiButton fill onClick={savePolicy} isLoading={isSavingPolicy}>
-                  {i18n.translate('xdrManager.savePolicyButton', { defaultMessage: 'Save policy' })}
+                  {i18n.translate('xdrCoordinator.savePolicyButton', { defaultMessage: 'Save policy' })}
                 </EuiButton>
               </EuiFlyoutFooter>
             </EuiFlyout>

@@ -1,4 +1,4 @@
-import { AppMountParameters, CoreSetup, CoreStart, Plugin } from '../../../src/core/public';
+import { AppMountParameters, CoreSetup, CoreStart, Plugin } from '../../OpenSearch-Dashboards/src/core/public';
 import { PLUGIN_ID, PLUGIN_NAME } from '../common';
 import { XdrManagerPluginSetup, XdrManagerPluginStart } from './types';
 
@@ -8,9 +8,9 @@ export class XdrManagerPlugin implements Plugin<XdrManagerPluginSetup, XdrManage
       id: PLUGIN_ID,
       title: PLUGIN_NAME,
       category: {
-        id: 'opensearch',
-        label: 'OpenSearch Plugins',
-        order: 2000,
+        id: 'xdrSecurity',
+        label: 'XDR Security',
+        order: 2200,
       },
       async mount(params: AppMountParameters) {
         const { renderApp } = await import('./application');

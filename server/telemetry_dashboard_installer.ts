@@ -22,7 +22,7 @@
  * Called once from plugin.start().
  */
 
-import { ISavedObjectsRepository, Logger } from '../../../src/core/server';
+import { ISavedObjectsRepository, Logger } from '../../OpenSearch-Dashboards/src/core/server';
 
 // ── Stable IDs ──────────────────────────────────────────────────────────────
 const INDEX_PATTERN_ID = 'xdr-agent-telemetry';

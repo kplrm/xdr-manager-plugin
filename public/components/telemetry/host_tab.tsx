@@ -31,14 +31,14 @@ export const HostTab: React.FC<HostTabProps> = ({ data }) => {
   if (!data?.latest) {
     return (
       <EuiCallOut
-        title={i18n.translate('xdrManager.telemetry.host.noData', {
+        title={i18n.translate('xdrCoordinator.telemetry.host.noData', {
           defaultMessage: 'No host telemetry data available',
         })}
         iconType="iInCircle"
         color="primary"
       >
         <p>
-          {i18n.translate('xdrManager.telemetry.host.noDataDescription', {
+          {i18n.translate('xdrCoordinator.telemetry.host.noDataDescription', {
             defaultMessage:
               'Host metrics will appear here once enrolled agents start sending system telemetry.',
           })}
@@ -94,7 +94,7 @@ export const HostTab: React.FC<HostTabProps> = ({ data }) => {
           <EuiPanel paddingSize="m" hasBorder>
             <EuiStat
               title={String(cpu.cores)}
-              description={i18n.translate('xdrManager.telemetry.host.cpuCores', {
+              description={i18n.translate('xdrCoordinator.telemetry.host.cpuCores', {
                 defaultMessage: 'CPU Cores',
               })}
               titleColor="primary"
@@ -106,7 +106,7 @@ export const HostTab: React.FC<HostTabProps> = ({ data }) => {
           <EuiPanel paddingSize="m" hasBorder>
             <EuiStat
               title={formatPct(cpu.total_pct)}
-              description={i18n.translate('xdrManager.telemetry.host.cpuTotal', {
+              description={i18n.translate('xdrCoordinator.telemetry.host.cpuTotal', {
                 defaultMessage: 'CPU Usage',
               })}
               titleColor={cpuTitleColor}
@@ -118,7 +118,7 @@ export const HostTab: React.FC<HostTabProps> = ({ data }) => {
           <EuiPanel paddingSize="m" hasBorder>
             <EuiStat
               title={formatPct(memory.used_pct)}
-              description={i18n.translate('xdrManager.telemetry.host.memoryUsed', {
+              description={i18n.translate('xdrCoordinator.telemetry.host.memoryUsed', {
                 defaultMessage: 'Memory Used',
               })}
               titleColor={memTitleColor}
@@ -130,7 +130,7 @@ export const HostTab: React.FC<HostTabProps> = ({ data }) => {
           <EuiPanel paddingSize="m" hasBorder>
             <EuiStat
               title={formatPct(swapUsedPct)}
-              description={i18n.translate('xdrManager.telemetry.host.swapUsed', {
+              description={i18n.translate('xdrCoordinator.telemetry.host.swapUsed', {
                 defaultMessage: 'Swap Used',
               })}
               titleColor={swapTitleColor}
@@ -148,7 +148,7 @@ export const HostTab: React.FC<HostTabProps> = ({ data }) => {
           <EuiPanel paddingSize="m" hasBorder>
             <EuiTitle size="xs">
               <h3>
-                {i18n.translate('xdrManager.telemetry.host.cpuBreakdown', {
+                {i18n.translate('xdrCoordinator.telemetry.host.cpuBreakdown', {
                   defaultMessage: 'CPU Breakdown',
                 })}
               </h3>
@@ -178,7 +178,7 @@ export const HostTab: React.FC<HostTabProps> = ({ data }) => {
           <EuiPanel paddingSize="m" hasBorder>
             <EuiTitle size="xs">
               <h3>
-                {i18n.translate('xdrManager.telemetry.host.memoryBreakdown', {
+                {i18n.translate('xdrCoordinator.telemetry.host.memoryBreakdown', {
                   defaultMessage: 'Memory Breakdown',
                 })}
               </h3>
@@ -186,7 +186,7 @@ export const HostTab: React.FC<HostTabProps> = ({ data }) => {
             <EuiSpacer size="xs" />
             <EuiText size="xs" color="subdued">
               <span>
-                {i18n.translate('xdrManager.telemetry.host.totalMemory', {
+                {i18n.translate('xdrCoordinator.telemetry.host.totalMemory', {
                   defaultMessage: 'Total',
                 })}
                 : {formatBytes(memory.total)}
@@ -218,7 +218,7 @@ export const HostTab: React.FC<HostTabProps> = ({ data }) => {
             <EuiSpacer size="m" />
             <EuiText size="xs" color="subdued">
               <span>
-                {i18n.translate('xdrManager.telemetry.host.swap', {
+                {i18n.translate('xdrCoordinator.telemetry.host.swap', {
                   defaultMessage: 'Swap',
                 })}
                 : {formatBytes(memory.swap_used_bytes)} / {formatBytes(memory.swap_total)}
@@ -235,7 +235,7 @@ export const HostTab: React.FC<HostTabProps> = ({ data }) => {
           <EuiPanel paddingSize="m" hasBorder>
             <EuiTitle size="xs">
               <h3>
-                {i18n.translate('xdrManager.telemetry.host.cpuTimeline', {
+                {i18n.translate('xdrCoordinator.telemetry.host.cpuTimeline', {
                   defaultMessage: 'CPU Usage Over Time',
                 })}
               </h3>
@@ -293,7 +293,7 @@ export const HostTab: React.FC<HostTabProps> = ({ data }) => {
           <EuiPanel paddingSize="m" hasBorder>
             <EuiTitle size="xs">
               <h3>
-                {i18n.translate('xdrManager.telemetry.host.memoryTimeline', {
+                {i18n.translate('xdrCoordinator.telemetry.host.memoryTimeline', {
                   defaultMessage: 'Memory Usage Over Time',
                 })}
               </h3>

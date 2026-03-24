@@ -6,8 +6,8 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  PLUGIN_NAME: xdr-manager-plugin
-  PLUGIN_ID: xdrManager
+  PLUGIN_NAME: xdr-coordinator
+  PLUGIN_ID: xdrCoordinator
   OPENSEARCH_DASHBOARDS_REPOSITORY: opensearch-project/OpenSearch-Dashboards
   OPENSEARCH_DASHBOARDS_VERSION: 3.5.0
   OPENSEARCH_DASHBOARDS_REF: 3.5.0
@@ -198,7 +198,7 @@ jobs:
             exit 1
           fi
 
-          cp "${ZIP_PATH}" dist/xdr-manager-plugin.zip
+          cp "${ZIP_PATH}" dist/xdr-coordinator.zip
 
           docker run --rm \
             --platform ${{ matrix.platform }} \
@@ -224,7 +224,7 @@ jobs:
                 exit 1
               fi
 
-              \${OSD_HOME}/bin/opensearch-dashboards-plugin install --allow-root file:///pkg/xdr-manager-plugin.zip
+              \${OSD_HOME}/bin/opensearch-dashboards-plugin install --allow-root file:///pkg/xdr-coordinator.zip
               echo '==> Contents of plugins/ after install:'
               ls \${OSD_HOME}/plugins/
               if [ ! -d \${OSD_HOME}/plugins/${{ env.PLUGIN_ID }} ]; then
@@ -257,8 +257,8 @@ jobs:
         run: |
           VERSION=${{ needs.version.outputs.version }}
           RAW_ZIP=$(find release-artifacts/raw -maxdepth 1 -name '*.zip' | head -1)
-          TARGET_ZIP="release-artifacts/xdr-manager-plugin_${VERSION}_osd-${{ env.OPENSEARCH_DASHBOARDS_VERSION }}.zip"
-          CHECKSUM_FILE="release-artifacts/xdr-manager-plugin_${VERSION}_osd-${{ env.OPENSEARCH_DASHBOARDS_VERSION }}.sha256"
+          TARGET_ZIP="release-artifacts/xdr-coordinator_${VERSION}_osd-${{ env.OPENSEARCH_DASHBOARDS_VERSION }}.zip"
+          CHECKSUM_FILE="release-artifacts/xdr-coordinator_${VERSION}_osd-${{ env.OPENSEARCH_DASHBOARDS_VERSION }}.sha256"
 
           if [ -z "${RAW_ZIP}" ]; then
             echo "Release ZIP artifact not found" >&2
@@ -282,7 +282,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.version.outputs.version }}
-          name: xdr-manager-plugin v${{ needs.version.outputs.version }}
+          name: xdr-coordinator v${{ needs.version.outputs.version }}
           draft: false
           prerelease: false
           generate_release_notes: true
@@ -312,7 +312,7 @@ jobs:
       - name: Stage ZIP and Dockerfile into build context
         run: |
           ZIP=$(find docker-context -maxdepth 1 -name '*.zip' | head -1)
-          mv "${ZIP}" docker-context/xdr-manager-plugin.zip
+          mv "${ZIP}" docker-context/xdr-coordinator.zip
           cp Dockerfile docker-context/Dockerfile
 
       - name: Set up QEMU

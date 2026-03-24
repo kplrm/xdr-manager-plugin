@@ -1,7 +1,7 @@
 import { schema } from '@osd/config-schema';
 import { randomBytes } from 'crypto';
 import * as https from 'https';
-import { IRouter, ISavedObjectsRepository, Logger } from '../../../../src/core/server';
+import { IRouter, ISavedObjectsRepository, Logger } from '../../../OpenSearch-Dashboards/src/core/server';
 import {
   AgentStatus,
   ControlPlaneHeartbeatRequest,
@@ -84,7 +84,7 @@ function fetchLatestVersionFromGitHub(): Promise<string> {
       hostname: 'api.github.com',
       path: '/repos/kplrm/xdr-agent/releases/latest',
       method: 'GET',
-      headers: { 'User-Agent': 'xdr-manager-plugin' },
+      headers: { 'User-Agent': 'xdr-coordinator' },
     };
     const req = https.request(options, (res) => {
       let data = '';

@@ -1,4 +1,4 @@
-import { PluginInitializerContext } from '../../../src/core/server';
+import { PluginInitializerContext } from '../../OpenSearch-Dashboards/src/core/server';
 import { XdrManagerPlugin } from './plugin';
 
 export function plugin(initializerContext: PluginInitializerContext) {

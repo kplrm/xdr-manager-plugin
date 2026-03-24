@@ -1,4 +1,4 @@
-# XDR Manager
+# XDR Coordinator
 
 OpenSearch Dashboards plugin for enrolling, managing, upgrading, and monitoring xdr-agent endpoints.
 
@@ -68,14 +68,14 @@ OSD_VERSION=3.5.0
 
 docker exec opensearch-dashboards \
   /usr/share/opensearch-dashboards/bin/opensearch-dashboards-plugin install --allow-root \
-  "https://github.com/kplrm/xdr-manager-plugin/releases/download/v${VERSION}/xdr-manager-plugin_${VERSION}_osd-${OSD_VERSION}.zip"
+  "https://github.com/kplrm/xdr-coordinator/releases/download/v${VERSION}/xdr-coordinator_${VERSION}_osd-${OSD_VERSION}.zip"
 ```
 
 Verify the plugin directory was created before restarting:
 
 ```bash
 docker exec opensearch-dashboards ls /usr/share/opensearch-dashboards/plugins/
-# xdrManager should appear in the list
+# xdrCoordinator should appear in the list
 ```
 
 Then restart:
@@ -90,11 +90,11 @@ docker restart opensearch-dashboards
 VERSION=0.1.0
 OSD_VERSION=3.5.0
 sudo /usr/share/opensearch-dashboards/bin/opensearch-dashboards-plugin install \
-  "https://github.com/kplrm/xdr-manager-plugin/releases/download/v${VERSION}/xdr-manager-plugin_${VERSION}_osd-${OSD_VERSION}.zip"
+  "https://github.com/kplrm/xdr-coordinator/releases/download/v${VERSION}/xdr-coordinator_${VERSION}_osd-${OSD_VERSION}.zip"
 sudo systemctl restart opensearch-dashboards
 ```
 
-After any of the above, open OpenSearch Dashboards and verify that **XDR Manager** appears in the left navigation.
+After any of the above, open OpenSearch Dashboards and verify that **XDR Coordinator** appears in the left navigation.
 
 ## Build from source
 
@@ -102,52 +102,18 @@ From the OpenSearch Dashboards root:
 
 ```bash
 yarn osd bootstrap --single-version=loose
-cd plugins/xdr-manager-plugin
+cd plugins/xdr-coordinator
 cat VERSION
 yarn build
 ```
 
-The ZIP artifact is created in `plugins/xdr-manager-plugin/build/`.
+The ZIP artifact is created in `plugins/xdr-coordinator/build/`.
 
 The plugin version is defined in `VERSION`. The build syncs `package.json` and `opensearch_dashboards.json` from that file.
 
 ## xdr-agent enrollment
 
-1. Open **XDR Manager**.
-2. Create or select a policy.
-3. Generate an enrollment token.
-4. Set these values in `xdr-agent/config/config.json`:
-
-```json
-{
-	"control_plane_url": "http://<opensearch-dashboards-host>:5601",
-	"enrollment_path": "/api/v1/agents/enroll",
-	"enrollment_token": "xdr_enroll_<generated-token>",
-	"policy_id": "<policy-id>"
-}
-```
-
-The agent will then enroll, send heartbeats, poll for commands, and ship telemetry to the control plane.
-
-
-## Build from source
-
-From the OpenSearch Dashboards root:
-
-```bash
-yarn osd bootstrap --single-version=loose
-cd plugins/xdr-manager-plugin
-cat VERSION
-yarn build
-```
-
-The ZIP artifact is created in `plugins/xdr-manager-plugin/build/`.
-
-The plugin version is defined in `VERSION`. The build syncs `package.json` and `opensearch_dashboards.json` from that file.
-
-## xdr-agent enrollment
-
-1. Open **XDR Manager**.
+1. Open **XDR Coordinator**.
 2. Create or select a policy.
 3. Generate an enrollment token.
 4. Set these values in `xdr-agent/config/config.json`:

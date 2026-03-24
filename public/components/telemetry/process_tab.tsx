@@ -48,14 +48,14 @@ export const ProcessTab: React.FC<ProcessTabProps> = ({ data }) => {
   if (!data || data.processes.length === 0) {
     return (
       <EuiCallOut
-        title={i18n.translate('xdrManager.telemetry.process.noData', {
+        title={i18n.translate('xdrCoordinator.telemetry.process.noData', {
           defaultMessage: 'No process telemetry data available',
         })}
         iconType="iInCircle"
         color="primary"
       >
         <p>
-          {i18n.translate('xdrManager.telemetry.process.noDataDescription', {
+          {i18n.translate('xdrCoordinator.telemetry.process.noDataDescription', {
             defaultMessage:
               'Process metrics will appear here once enrolled agents start sending process telemetry.',
           })}

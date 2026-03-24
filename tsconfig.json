@@ -1,6 +1,6 @@
 {
   // extend OpenSearch Dashboards's tsconfig, or use your own settings
-  "extends": "../../tsconfig.json",
+  "extends": "../OpenSearch-Dashboards/tsconfig.json",
 
   // tell the TypeScript compiler where to find your source files
   "include": [
@@ -9,12 +9,16 @@
     "public/**/*.ts",
     "public/**/*.tsx",
     "server/**/*.ts",
-    "../../typings/**/*"
+    "../OpenSearch-Dashboards/typings/**/*"
   ],
   "exclude": ["node_modules", "*/node_modules/"],
   "compilerOptions": {
     "outDir": "./target",
     "skipLibCheck": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "typeRoots": [
+      "../OpenSearch-Dashboards/node_modules/@types",
+      "node_modules/@types"
+    ]
   },
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { AppMountParameters, CoreStart } from '../../../src/core/public';
+import { AppMountParameters, CoreStart } from '../../OpenSearch-Dashboards/src/core/public';
 import { XdrManagerApp } from './components/app';
 
 export const renderApp = ({ http, notifications }: CoreStart, { appBasePath, element }: AppMountParameters) => {

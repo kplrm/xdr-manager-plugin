@@ -4,7 +4,7 @@
  * (Host, Process, Network).
  */
 
-import { IRouter, Logger } from '../../../../src/core/server';
+import { IRouter, Logger } from '../../../OpenSearch-Dashboards/src/core/server';
 import {
   TelemetryHostResponse,
   TelemetryHostMetrics,

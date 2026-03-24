@@ -5,7 +5,7 @@ import {
   Plugin,
   PluginInitializerContext,
   ISavedObjectsRepository,
-} from '../../../src/core/server';
+} from '../../OpenSearch-Dashboards/src/core/server';
 import { defineRoutes } from './routes';
 import { installTelemetryDashboard } from './telemetry_dashboard_installer';
 import { installTelemetryIsmPolicy } from './telemetry_ism_installer';

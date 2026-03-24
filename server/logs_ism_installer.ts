@@ -3,7 +3,7 @@
  * stored under `xdr-agent-logs-*`.
  */
 
-import { Logger } from '../../../src/core/server';
+import { Logger } from '../../OpenSearch-Dashboards/src/core/server';
 
 const ISM_POLICY_ID = 'xdr-agent-logs-retention';
 const INDEX_TEMPLATE_NAME = 'xdr-agent-logs-template';
