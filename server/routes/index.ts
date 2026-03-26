@@ -830,6 +830,8 @@ export function defineRoutes(
   const XDR_SECURITY_INDEX_PREFIX = '.xdr-agent-security';
   const XDR_LOGS_INDEX_PREFIX = 'xdr-agent-logs';
   const SECURITY_MODULE_PREFIXES = ['detection.', 'prevention.', 'response.'];
+  const MAX_EVENTS_PER_INGEST_REQUEST = 1000;
+  const BULK_INDEX_CHUNK_SIZE = 250;
 
   const isSecurityEvent = (event: ControlPlaneTelemetryRequest['events'][number]): boolean => {
     const eventModule = event['event.module'] ?? '';
@@ -884,25 +886,31 @@ export function defineRoutes(
       logger.info(`Created ${kind} index [${indexName}]`);
     }
 
-    const bulkBody: Array<Record<string, unknown>> = [];
-    for (const evt of events) {
-      bulkBody.push({ index: { _index: indexName, _id: evt.id } });
-      bulkBody.push({
-        ...evt,
-        'agent.id': payload.agent_id,
-        indexed_at: new Date().toISOString(),
-      });
-    }
+    // Send bulk requests in bounded chunks to avoid creating one very large payload.
+    for (let start = 0; start < events.length; start += BULK_INDEX_CHUNK_SIZE) {
+      const end = Math.min(start + BULK_INDEX_CHUNK_SIZE, events.length);
+      const bulkBody: Array<Record<string, unknown>> = [];
 
-    const bulkResponse = await opensearchClient.bulk({ body: bulkBody });
-    if (bulkResponse.body.errors) {
-      const failedItems = bulkResponse.body.items.filter((item: any) => {
-        const action = item.index || item.create || item.update || item.delete;
-        return action?.error;
-      });
-      logger.warn(
-        `Bulk index to [${indexName}]: ${failedItems.length}/${events.length} ${kind} events failed`
-      );
+      for (let i = start; i < end; i++) {
+        const evt = events[i];
+        bulkBody.push({ index: { _index: indexName, _id: evt.id } });
+        bulkBody.push({
+          ...evt,
+          'agent.id': payload.agent_id,
+          indexed_at: new Date().toISOString(),
+        });
+      }
+
+      const bulkResponse = await opensearchClient.bulk({ body: bulkBody });
+      if (bulkResponse.body.errors) {
+        const failedItems = bulkResponse.body.items.filter((item: any) => {
+          const action = item.index || item.create || item.update || item.delete;
+          return action?.error;
+        });
+        logger.warn(
+          `Bulk index to [${indexName}]: ${failedItems.length}/${end - start} ${kind} events failed`
+        );
+      }
     }
   };
 
@@ -912,7 +920,7 @@ export function defineRoutes(
       validate: {
         body: schema.object({
           agent_id: schema.string({ minLength: 1 }),
-          events: schema.arrayOf(telemetryEventSchema, { minSize: 1, maxSize: 5000 }),
+          events: schema.arrayOf(telemetryEventSchema, { minSize: 1, maxSize: MAX_EVENTS_PER_INGEST_REQUEST }),
         }),
       },
       options: {
@@ -971,7 +979,7 @@ export function defineRoutes(
       validate: {
         body: schema.object({
           agent_id: schema.string({ minLength: 1 }),
-          events: schema.arrayOf(telemetryEventSchema, { minSize: 1, maxSize: 5000 }),
+          events: schema.arrayOf(telemetryEventSchema, { minSize: 1, maxSize: MAX_EVENTS_PER_INGEST_REQUEST }),
         }),
       },
       options: {
@@ -1027,7 +1035,7 @@ export function defineRoutes(
       validate: {
         body: schema.object({
           agent_id: schema.string({ minLength: 1 }),
-          events: schema.arrayOf(telemetryEventSchema, { minSize: 1, maxSize: 5000 }),
+          events: schema.arrayOf(telemetryEventSchema, { minSize: 1, maxSize: MAX_EVENTS_PER_INGEST_REQUEST }),
         }),
       },
       options: {

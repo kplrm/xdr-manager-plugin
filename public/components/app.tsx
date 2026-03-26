@@ -246,8 +246,11 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
     }
 
     const timer = window.setInterval(() => {
+      if (document.visibilityState === 'hidden') {
+        return;
+      }
       loadData(false);
-    }, 5000);
+    }, 15000);
 
     return () => window.clearInterval(timer);
   }, [activeTab, loadData]);
@@ -259,12 +262,20 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
   }, [activeTab, loadEnrollmentTokens]);
 
   useEffect(() => {
+    if (activeTab !== 'agents') {
+      return;
+    }
+
+    setNowMs(Date.now());
     const timer = window.setInterval(() => {
+      if (document.visibilityState === 'hidden') {
+        return;
+      }
       setNowMs(Date.now());
-    }, 1000);
+    }, 5000);
 
     return () => window.clearInterval(timer);
-  }, []);
+  }, [activeTab]);
 
   const runAction = useCallback(
     async (agentId: string, action: XdrAction) => {
@@ -308,7 +319,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
     [http]
   );
 
-  // When the 5 s poll picks up a new agent version that matches latestVersion,
+  // When polling picks up a new agent version that matches latestVersion,
   // transition queued → confirmed (green check for 4 s) for that agent.
   useEffect(() => {
     if (upgradeQueuedAgentIds.size === 0 || !latestVersion) {

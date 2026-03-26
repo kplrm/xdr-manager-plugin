@@ -93,7 +93,12 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
 
   // Auto-refresh every 30 s
   useEffect(() => {
-    const timer = window.setInterval(() => fetchData(false), 30000);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'hidden') {
+        return;
+      }
+      fetchData(false);
+    }, 30000);
     return () => window.clearInterval(timer);
   }, [fetchData]);
 
