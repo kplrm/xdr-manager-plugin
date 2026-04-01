@@ -918,6 +918,12 @@ export function defineRoutes(
 
   const isSecurityEvent = (event: ControlPlaneTelemetryRequest['events'][number]): boolean => {
     const eventModule = event['event.module'] ?? '';
+
+    // Injection telemetry uses alert/intrusion_detection fields, but still belongs on telemetry endpoint.
+    if (eventModule === 'telemetry.injection') {
+      return false;
+    }
+
     return (
       event['event.kind'] === 'alert' ||
       event['event.category'] === 'intrusion_detection' ||
