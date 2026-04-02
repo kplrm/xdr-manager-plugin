@@ -1,130 +1,70 @@
-# XDR Coordinator
+# xdr-coordinator
 
-OpenSearch Dashboards plugin for enrolling, managing, upgrading, and monitoring xdr-agent endpoints.
+`xdr-coordinator` is the OpenSearch Dashboards plugin that owns fleet lifecycle and telemetry operations for `xdr-agent`.
 
-## Requirements
+It is the control-plane surface for enrollment, heartbeats, command polling, operator fleet views, telemetry dashboards, and index lifecycle setup.
 
-- OpenSearch is already running.
-- OpenSearch Dashboards is already running and connected to that OpenSearch cluster.
-- OpenSearch Dashboards version: `3.5.0`.
+## Scope
 
-## Current features
+`xdr-coordinator` owns:
 
-- Agent inventory with `healthy`, `offline`, and `unseen` states.
-- Policy management from the UI: create, edit, and delete policies.
-- Enrollment token generation and token consumption tracking.
-- Agent-facing APIs for enroll, heartbeat, command polling, and telemetry ingestion.
-- Agent removal and queued upgrade command delivery.
-- Latest xdr-agent version lookup from GitHub Releases.
-- Telemetry dashboards for host, process, and network data from `.xdr-agent-telemetry-*` indices.
-- Saved object persistence for agents and enrollment tokens.
+- agent enrollment and enrollment token workflows
+- heartbeat and lightweight command polling endpoints
+- agent records and operator fleet APIs
+- telemetry/security/log index lifecycle setup in OpenSearch
+- telemetry dashboard installation and telemetry query routes
+- rollout command hints surfaced to agents through command polling
 
-## Deploy
+It does not own:
 
-### Option 1 — Replace the OpenSearch Dashboards container (recommended)
+- rule authoring or bundle signing
+- prevention policy content design
+- endpoint detection logic
 
-Pre-built images with the plugin already baked in are published to the GitHub Container Registry for every release. This is the only approach that survives container recreation.
+Those concerns belong to `xdr-defense` and `xdr-agent`.
 
-Update the `opensearch-dashboards` service image in your `docker-compose.yml`:
+## Read Next
 
-```yaml
-services:
-  opensearch-dashboards:
-    image: ghcr.io/kplrm/opensearch-dashboards-xdr:latest
-    container_name: opensearch-dashboards
-    ports:
-      - 5601:5601
-    environment:
-      - OPENSEARCH_HOSTS=["http://opensearch-node1:9200"]
-      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
-    networks:
-      - opensearch-net
-    depends_on:
-      - opensearch-node1
-```
+- `docs/architecture.md`
+- `docs/api-data-model.md`
 
-Recreate the container:
+## Current Implementation Notes
 
-```bash
-docker compose up -d opensearch-dashboards
-```
+- Plugin id: `xdrCoordinator`
+- Target OpenSearch Dashboards version: `3.5.0`
+- Current repo metadata is not fully aligned: `package.json` and `opensearch_dashboards.json` are `0.4.0`, while `VERSION` is `0.4.1` for packaging flow
 
-Available image tags:
-- `ghcr.io/kplrm/opensearch-dashboards-xdr:latest` — most recent release
-- `ghcr.io/kplrm/opensearch-dashboards-xdr:v0.1.0` — pinned version
+## Core Behaviors
 
-> **Note:** the image can also be pulled and run with plain `docker run` on any machine with Docker, no compose required:
-> ```bash
-> docker pull ghcr.io/kplrm/opensearch-dashboards-xdr:latest
-> ```
+### Fleet lifecycle
+- Issues and tracks enrollment tokens.
+- Accepts agent enrollment requests under `/api/v1/agents/enroll`.
+- Accepts heartbeats under `/api/v1/agents/heartbeat`.
+- Serves lightweight command polling under `/api/v1/agents/commands`.
+- Maintains agent status through hidden saved objects.
 
-### Option 2 — Install into the running container
+### Operator APIs
+- Exposes fleet and policy operations under `/api/xdr_manager/*`.
+- Supports agent list, removal, enrollment token management, and upgrade action workflows.
 
-> **Warning:** changes made via `docker exec` are stored in the container's writable layer and are **lost whenever the container is recreated** (e.g. `docker compose up -d`, Docker daemon restart with a restart policy, or explicit `docker compose rm`). Use this option only for quick testing on a single machine. For persistent deployments use Option 1.
+### Telemetry operations
+- Installs hidden index patterns for telemetry, security, and logs.
+- Installs dashboards and visualizations for the current telemetry surface.
+- Installs ISM policies and templates for `.xdr-agent-telemetry-*`, `.xdr-agent-security-*`, and `.xdr-agent-logs-*`.
+- Exposes telemetry aggregation routes for host, process, and network views.
+
+### Cross-plugin interaction
+- Uses rollout state from `xdr-defense` to surface pending YARA rollout commands to agents.
+- Does not build or sign rule content itself.
+
+## Build
 
 ```bash
-VERSION=0.1.0
-OSD_VERSION=3.5.0
-
-docker exec opensearch-dashboards \
-  /usr/share/opensearch-dashboards/bin/opensearch-dashboards-plugin install --allow-root \
-  "https://github.com/kplrm/xdr-coordinator/releases/download/v${VERSION}/xdr-coordinator_${VERSION}_osd-${OSD_VERSION}.zip"
+cd /home/kplrm/github/xdr-coordinator
+yarn build --opensearch-dashboards-version 3.5.0
 ```
 
-Verify the plugin directory was created before restarting:
+## Documentation Rule
 
-```bash
-docker exec opensearch-dashboards ls /usr/share/opensearch-dashboards/plugins/
-# xdrCoordinator should appear in the list
-```
-
-Then restart:
-
-```bash
-docker restart opensearch-dashboards
-```
-
-### Option 3 — Install on a bare-metal OpenSearch Dashboards
-
-```bash
-VERSION=0.1.0
-OSD_VERSION=3.5.0
-sudo /usr/share/opensearch-dashboards/bin/opensearch-dashboards-plugin install \
-  "https://github.com/kplrm/xdr-coordinator/releases/download/v${VERSION}/xdr-coordinator_${VERSION}_osd-${OSD_VERSION}.zip"
-sudo systemctl restart opensearch-dashboards
-```
-
-After any of the above, open OpenSearch Dashboards and verify that **XDR Coordinator** appears in the left navigation.
-
-## Build from source
-
-From the OpenSearch Dashboards root:
-
-```bash
-yarn osd bootstrap --single-version=loose
-cd plugins/xdr-coordinator
-cat VERSION
-yarn build
-```
-
-The ZIP artifact is created in `plugins/xdr-coordinator/build/`.
-
-The plugin version is defined in `VERSION`. The build syncs `package.json` and `opensearch_dashboards.json` from that file.
-
-## xdr-agent enrollment
-
-1. Open **XDR Coordinator**.
-2. Create or select a policy.
-3. Generate an enrollment token.
-4. Set these values in `xdr-agent/config/config.json`:
-
-```json
-{
-	"control_plane_url": "http://<opensearch-dashboards-host>:5601",
-	"enrollment_path": "/api/v1/agents/enroll",
-	"enrollment_token": "xdr_enroll_<generated-token>",
-	"policy_id": "<policy-id>"
-}
-```
-
-The agent will then enroll, send heartbeats, poll for commands, and ship telemetry to the control plane.
+Keep the README as the repo overview.
+Put route details, saved object ownership, and index behavior in the docs directory so they stay authoritative and are easier to maintain.
