@@ -52,6 +52,8 @@ function buildIndexTemplate() {
         number_of_shards: 1,
         number_of_replicas: 0,
         'index.hidden': true,
+        // Prevent malformed scalar parsing from rejecting entire documents.
+        'index.mapping.ignore_malformed': true,
         'opendistro.index_state_management.policy_id': ISM_POLICY_ID,
       },
       mappings: {

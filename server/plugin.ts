@@ -87,7 +87,7 @@ export class XdrManagerPlugin implements Plugin<XdrManagerPluginSetup, XdrManage
       this.logger.error(`xdr_manager: telemetry dashboard install failed: ${err}`)
     );
 
-    // Install out-of-the-box hidden index patterns for logs and security views
+    // Install out-of-the-box hidden index patterns for logs and security views.
     installManagementIndexPatterns(repo, this.logger).catch((err) =>
       this.logger.error(`xdr_manager: management index-pattern install failed: ${err}`)
     );
