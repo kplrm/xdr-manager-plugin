@@ -7,6 +7,7 @@ export class XdrManagerPlugin implements Plugin<XdrManagerPluginSetup, XdrManage
     core.application.register({
       id: PLUGIN_ID,
       title: PLUGIN_NAME,
+      order: 1,
       category: {
         id: 'xdrSecurity',
         label: 'XDR Security',

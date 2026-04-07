@@ -21,6 +21,7 @@ export interface XdrAgent {
   lastSeen: string;
   tags: string[];
   version: string;
+  enrollmentToken?: string;
 }
 
 export interface ListAgentsResponse {
@@ -41,12 +42,14 @@ export interface EnrollAgentResponse {
 
 export interface GenerateEnrollmentTokenRequest {
   policyId: string;
+  tag?: string;
 }
 
 export interface GenerateEnrollmentTokenResponse {
   token: string;
   policyId: string;
   createdAt: string;
+  tag?: string;
 }
 
 export interface EnrollmentTokenStatusResponse {
@@ -54,9 +57,14 @@ export interface EnrollmentTokenStatusResponse {
   policyId: string;
   status: 'pending' | 'consumed';
   createdAt: string;
+  tag?: string;
   consumedAt?: string;
   consumedAgentId?: string;
   consumedHostname?: string;
+}
+
+export interface UpdateEnrollmentTokenTagRequest {
+  tag: string;
 }
 
 export interface ControlPlaneEnrollRequest {
@@ -110,6 +118,7 @@ export interface XdrEnrollmentToken {
   policyName: string;
   status: 'pending' | 'consumed';
   createdAt: string;
+  tag?: string;
   consumedAt?: string;
   consumedHostname?: string;
 }

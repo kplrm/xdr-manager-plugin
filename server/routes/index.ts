@@ -11,12 +11,14 @@ import {
   ControlPlaneTelemetryRequest,
   ControlPlaneTelemetryResponse,
   EnrollmentTokenStatusResponse,
+  GenerateEnrollmentTokenRequest,
   GenerateEnrollmentTokenResponse,
   LatestVersionResponse,
   ListAgentsResponse,
   ListEnrollmentTokensResponse,
   RemoveAgentResponse,
   RunActionResponse,
+  UpdateEnrollmentTokenTagRequest,
   UpsertPolicyRequest,
   UpsertPolicyResponse,
   XdrAgent,
@@ -50,12 +52,14 @@ function toXdrAgent(so: { id: string; attributes: XdrAgentAttributes }): XdrAgen
     lastSeen: so.attributes.lastSeen,
     tags: so.attributes.tags,
     version: so.attributes.version,
+    enrollmentToken: so.attributes.enrollmentToken,
   };
 }
 
 type EnrollmentTokenAttributes = {
   token: string;
   policyId: string;
+  tag?: string;
   createdAt: string;
   consumedAt?: string;
   consumedAgentId?: string;
@@ -165,6 +169,79 @@ const readBearerToken = (authorization: string | string[] | undefined): string |
   }
 
   return match[1].trim() || null;
+};
+
+const authorizeAgentRequest = async (
+  repo: ISavedObjectsRepository,
+  authorization: string | string[] | undefined,
+  agentId: string
+): Promise<
+  | { ok: true; agent: { id: string; attributes: XdrAgentAttributes } }
+  | { ok: false; status: 'unauthorized' | 'not-found'; message: string }
+> => {
+  const bearerToken = readBearerToken(authorization);
+  if (!bearerToken) {
+    return {
+      ok: false,
+      status: 'unauthorized',
+      message: 'Missing or invalid Authorization header',
+    };
+  }
+
+  const tokenSearchResult = await repo.find<EnrollmentTokenAttributes>({
+    type: XDR_ENROLLMENT_TOKEN_SAVED_OBJECT_TYPE,
+    search: bearerToken,
+    searchFields: ['token'],
+    perPage: 1,
+  });
+
+  if (!tokenSearchResult.saved_objects[0]) {
+    return {
+      ok: false,
+      status: 'unauthorized',
+      message: 'Enrollment token is invalid',
+    };
+  }
+
+  let agent: { id: string; attributes: XdrAgentAttributes };
+  try {
+    agent = await repo.get<XdrAgentAttributes>(XDR_AGENT_SAVED_OBJECT_TYPE, agentId);
+  } catch (err: any) {
+    if (err?.output?.statusCode === 404) {
+      return {
+        ok: false,
+        status: 'not-found',
+        message: `Agent [${agentId}] not found`,
+      };
+    }
+    throw err;
+  }
+
+  if (!agent.attributes.enrollmentToken || agent.attributes.enrollmentToken !== bearerToken) {
+    if (!agent.attributes.enrollmentToken) {
+      await repo.update<XdrAgentAttributes>(XDR_AGENT_SAVED_OBJECT_TYPE, agentId, {
+        enrollmentToken: bearerToken,
+      });
+      return {
+        ok: true,
+        agent: {
+          ...agent,
+          attributes: {
+            ...agent.attributes,
+            enrollmentToken: bearerToken,
+          },
+        },
+      };
+    }
+
+    return {
+      ok: false,
+      status: 'unauthorized',
+      message: `Bearer token does not match enrolled token for agent [${agentId}]`,
+    };
+  }
+
+  return { ok: true, agent };
 };
 
 const policyRequestSchema = schema.object({
@@ -285,10 +362,12 @@ export function defineRoutes(
       validate: {
         body: schema.object({
           policyId: schema.string({ minLength: 1 }),
+          tag: schema.maybe(schema.string()),
         }),
       },
     },
     async (context, request, response) => {
+      const payload = request.body as GenerateEnrollmentTokenRequest;
       const selectedPolicy = policies.find((policy) => policy.id === request.body.policyId);
 
       if (!selectedPolicy) {
@@ -299,16 +378,23 @@ export function defineRoutes(
 
       const token = issueEnrollmentToken();
       const createdAt = new Date().toISOString();
+      const trimmedTag = payload.tag?.trim();
       const repo = await agentRepoPromise;
       await repo.create<EnrollmentTokenAttributes>(
         XDR_ENROLLMENT_TOKEN_SAVED_OBJECT_TYPE,
-        { token, policyId: request.body.policyId, createdAt }
+        {
+          token,
+          policyId: request.body.policyId,
+          createdAt,
+          tag: trimmedTag || undefined,
+        }
       );
 
       const body: GenerateEnrollmentTokenResponse = {
         token,
         policyId: request.body.policyId,
         createdAt,
+        tag: trimmedTag || undefined,
       };
 
       return response.ok({ body });
@@ -345,6 +431,7 @@ export function defineRoutes(
         policyId: t.policyId,
         status: t.consumedAt ? 'consumed' : 'pending',
         createdAt: t.createdAt,
+        tag: t.tag,
         consumedAt: t.consumedAt,
         consumedAgentId: t.consumedAgentId,
         consumedHostname: t.consumedHostname,
@@ -385,6 +472,49 @@ export function defineRoutes(
 
       return response.ok({
         body: { message: 'Enrollment token revoked' },
+      });
+    }
+  );
+
+  router.put(
+    {
+      path: '/api/xdr_manager/enrollment_tokens/{token}/tag',
+      validate: {
+        params: schema.object({
+          token: schema.string({ minLength: 1 }),
+        }),
+        body: schema.object({
+          tag: schema.string(),
+        }),
+      },
+    },
+    async (_context, request, response) => {
+      const payload = request.body as UpdateEnrollmentTokenTagRequest;
+      const repo = await agentRepoPromise;
+      const result = await repo.find<EnrollmentTokenAttributes>({
+        type: XDR_ENROLLMENT_TOKEN_SAVED_OBJECT_TYPE,
+        search: request.params.token,
+        searchFields: ['token'],
+        perPage: 1,
+      });
+
+      const tokenSO = result.saved_objects[0] ?? null;
+      if (!tokenSO) {
+        return response.notFound({
+          body: `Enrollment token not found`,
+        });
+      }
+
+      const trimmedTag = payload.tag.trim();
+      await repo.update<EnrollmentTokenAttributes>(XDR_ENROLLMENT_TOKEN_SAVED_OBJECT_TYPE, tokenSO.id, {
+        tag: trimmedTag || undefined,
+      });
+
+      return response.ok({
+        body: {
+          token: tokenSO.attributes.token,
+          tag: trimmedTag || undefined,
+        },
       });
     }
   );
@@ -436,14 +566,6 @@ export function defineRoutes(
         });
       }
 
-      if (tokenSO.attributes.consumedAt) {
-        return response.unauthorized({
-          body: {
-            message: 'Enrollment token already used',
-          },
-        });
-      }
-
       const payload = request.body as ControlPlaneEnrollRequest;
       if (tokenSO.attributes.policyId !== payload.policy_id) {
         return response.badRequest({
@@ -470,6 +592,7 @@ export function defineRoutes(
         lastSeen: now,
         tags: payload.tags,
         version: payload.agent_version,
+        enrollmentToken: bearerToken,
       };
 
       let existingAgent: { id: string; attributes: XdrAgentAttributes } | null = null;
@@ -516,11 +639,13 @@ export function defineRoutes(
       removedAgentIds.delete(payload.agent_id);
 
       // Mark token as consumed in saved objects
-      await repo.update<EnrollmentTokenAttributes>(XDR_ENROLLMENT_TOKEN_SAVED_OBJECT_TYPE, tokenSO.id, {
-        consumedAt: now,
-        consumedAgentId: payload.agent_id,
-        consumedHostname: payload.hostname,
-      });
+      if (!tokenSO.attributes.consumedAt) {
+        await repo.update<EnrollmentTokenAttributes>(XDR_ENROLLMENT_TOKEN_SAVED_OBJECT_TYPE, tokenSO.id, {
+          consumedAt: now,
+          consumedAgentId: payload.agent_id,
+          consumedHostname: payload.hostname,
+        });
+      }
 
       return response.ok({ body });
     }
@@ -545,27 +670,28 @@ export function defineRoutes(
     },
     async (context, request, response) => {
       const payload = request.body as ControlPlaneHeartbeatRequest;
+      const repo = await agentRepoPromise;
+      const auth = await authorizeAgentRequest(repo, request.headers.authorization, payload.agent_id);
+      if (!auth.ok) {
+        if (auth.status === 'not-found') {
+          return response.notFound({
+            body: {
+              message: auth.message,
+            },
+          });
+        }
+        return response.unauthorized({
+          body: {
+            message: auth.message,
+          },
+        });
+      }
 
       // Reject heartbeats from agents that were removed via the UI.
       if (removedAgentIds.has(payload.agent_id)) {
         return response.unauthorized({
           body: { message: `Agent [${payload.agent_id}] has been removed` },
         });
-      }
-
-      const repo = await agentRepoPromise;
-
-      try {
-        await repo.get<XdrAgentAttributes>(XDR_AGENT_SAVED_OBJECT_TYPE, payload.agent_id);
-      } catch (err: any) {
-        if (err?.output?.statusCode === 404) {
-          return response.notFound({
-            body: {
-              message: `Agent [${payload.agent_id}] not found`,
-            },
-          });
-        }
-        throw err;
       }
 
       await repo.update(XDR_AGENT_SAVED_OBJECT_TYPE, payload.agent_id, {
@@ -575,6 +701,7 @@ export function defineRoutes(
         lastSeen: new Date().toISOString(),
         tags: payload.tags,
         version: payload.agent_version,
+        enrollmentToken: auth.agent.attributes.enrollmentToken,
       });
 
       let pendingCommands: string[] = [];
@@ -624,20 +751,30 @@ export function defineRoutes(
         agent_version: string;
       };
 
+      const repo = await agentRepoPromise;
+      const auth = await authorizeAgentRequest(repo, request.headers.authorization, agent_id);
+      if (!auth.ok) {
+        if (auth.status === 'not-found') {
+          return response.notFound({
+            body: {
+              message: auth.message,
+            },
+          });
+        }
+        return response.unauthorized({
+          body: {
+            message: auth.message,
+          },
+        });
+      }
+
       if (removedAgentIds.has(agent_id)) {
         return response.unauthorized({
           body: { message: `Agent [${agent_id}] has been removed` },
         });
       }
 
-      const repo = await agentRepoPromise;
-      let policyId = '';
-      try {
-        const agent = await repo.get<XdrAgentAttributes>(XDR_AGENT_SAVED_OBJECT_TYPE, agent_id);
-        policyId = String(agent.attributes.policyId ?? '');
-      } catch {
-        policyId = '';
-      }
+      const policyId = String(auth.agent.attributes.policyId ?? '');
 
       const pendingCommands = await collectPendingCommands(context, agent_id, agent_version, policyId);
 
@@ -1018,6 +1155,14 @@ export function defineRoutes(
     },
     async (context, request, response) => {
       const payload = request.body as ControlPlaneTelemetryRequest;
+      const repo = await agentRepoPromise;
+      const auth = await authorizeAgentRequest(repo, request.headers.authorization, payload.agent_id);
+      if (!auth.ok) {
+        if (auth.status === 'not-found') {
+          return response.notFound({ body: { message: auth.message } });
+        }
+        return response.unauthorized({ body: { message: auth.message } });
+      }
 
       // Reject telemetry from agents that were removed via the UI.
       if (removedAgentIds.has(payload.agent_id)) {
@@ -1078,6 +1223,15 @@ export function defineRoutes(
     async (context, request, response) => {
       const payload = request.body as ControlPlaneTelemetryRequest;
 
+      const repo = await agentRepoPromise;
+      const auth = await authorizeAgentRequest(repo, request.headers.authorization, payload.agent_id);
+      if (!auth.ok) {
+        if (auth.status === 'not-found') {
+          return response.notFound({ body: { message: auth.message } });
+        }
+        return response.unauthorized({ body: { message: auth.message } });
+      }
+
       if (removedAgentIds.has(payload.agent_id)) {
         return response.unauthorized({
           body: { message: `Agent [${payload.agent_id}] has been removed` },
@@ -1133,6 +1287,15 @@ export function defineRoutes(
     },
     async (context, request, response) => {
       const payload = request.body as ControlPlaneTelemetryRequest;
+
+      const repo = await agentRepoPromise;
+      const auth = await authorizeAgentRequest(repo, request.headers.authorization, payload.agent_id);
+      if (!auth.ok) {
+        if (auth.status === 'not-found') {
+          return response.notFound({ body: { message: auth.message } });
+        }
+        return response.unauthorized({ body: { message: auth.message } });
+      }
 
       if (removedAgentIds.has(payload.agent_id)) {
         return response.unauthorized({
@@ -1243,6 +1406,7 @@ export function defineRoutes(
             policyName: policyNameById[t.policyId] ?? t.policyId,
             status: (t.consumedAt ? 'consumed' : 'pending') as 'consumed' | 'pending',
             createdAt: t.createdAt,
+            tag: t.tag,
             consumedAt: t.consumedAt,
             consumedHostname: t.consumedHostname,
           };

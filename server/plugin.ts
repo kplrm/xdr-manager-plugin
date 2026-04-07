@@ -43,6 +43,7 @@ export class XdrManagerPlugin implements Plugin<XdrManagerPluginSetup, XdrManage
           lastSeen: { type: 'date' },
           tags: { type: 'keyword' },
           version: { type: 'keyword' },
+          enrollmentToken: { type: 'keyword' },
         },
       },
     });
@@ -56,6 +57,7 @@ export class XdrManagerPlugin implements Plugin<XdrManagerPluginSetup, XdrManage
         properties: {
           token: { type: 'keyword' },
           policyId: { type: 'keyword' },
+          tag: { type: 'keyword' },
           createdAt: { type: 'date' },
           consumedAt: { type: 'date' },
           consumedAgentId: { type: 'keyword' },

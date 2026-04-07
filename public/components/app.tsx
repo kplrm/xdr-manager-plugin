@@ -120,6 +120,8 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
 
   const [enrollmentTokensList, setEnrollmentTokensList] = useState<XdrEnrollmentToken[]>([]);
   const [isLoadingTokens, setIsLoadingTokens] = useState(false);
+  const [tokenTagDraftByToken, setTokenTagDraftByToken] = useState<Record<string, string>>({});
+  const [savingTokenTags, setSavingTokenTags] = useState<Set<string>>(new Set());
 
   const [isEnrollFlyoutOpen, setIsEnrollFlyoutOpen] = useState(false);
   const [policyId, setPolicyId] = useState('');
@@ -189,6 +191,9 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
     try {
       const response = await http.get<ListEnrollmentTokensResponse>('/api/xdr_manager/enrollment_tokens');
       setEnrollmentTokensList(response.tokens);
+      setTokenTagDraftByToken(
+        Object.fromEntries(response.tokens.map((token) => [token.token, token.tag ?? '']))
+      );
     } catch (error) {
       notifications.toasts.addDanger({
         title: i18n.translate('xdrCoordinator.loadTokensError', {
@@ -399,6 +404,11 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
     setTokenPolicyId('');
     setTokenConsumedHostname('');
   }, []);
+
+  const closeEnrollFlyout = useCallback(() => {
+    stopEnrollmentValidation();
+    setIsEnrollFlyoutOpen(false);
+  }, [stopEnrollmentValidation]);
 
   useEffect(() => {
     if (!isEnrollFlyoutOpen || !enrollmentToken || tokenValidationStatus !== 'waiting') {
@@ -820,6 +830,82 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
       name: i18n.translate('xdrCoordinator.tokenColumn.policy', { defaultMessage: 'Policy' }),
     },
     {
+      name: i18n.translate('xdrCoordinator.tokenColumn.tag', { defaultMessage: 'Tag' }),
+      width: '280px',
+      render: (item: XdrEnrollmentToken) => {
+        const draftTag = tokenTagDraftByToken[item.token] ?? item.tag ?? '';
+        const isSaving = savingTokenTags.has(item.token);
+        return (
+          <EuiFlexGroup gutterSize="xs" alignItems="center" responsive={false}>
+            <EuiFlexItem>
+              <EuiFieldText
+                compressed
+                value={draftTag}
+                placeholder={i18n.translate('xdrCoordinator.tokenColumn.tagPlaceholder', {
+                  defaultMessage: 'Optional tag',
+                })}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setTokenTagDraftByToken((prev) => ({ ...prev, [item.token]: value }));
+                }}
+              />
+            </EuiFlexItem>
+            <EuiFlexItem grow={false}>
+              <EuiButtonEmpty
+                size="xs"
+                iconType="save"
+                isLoading={isSaving}
+                isDisabled={isSaving || draftTag === (item.tag ?? '')}
+                onClick={async () => {
+                  setSavingTokenTags((prev) => {
+                    const next = new Set(prev);
+                    next.add(item.token);
+                    return next;
+                  });
+                  try {
+                    const tag = (tokenTagDraftByToken[item.token] ?? '').trim();
+                    await http.put(`/api/xdr_manager/enrollment_tokens/${encodeURIComponent(item.token)}/tag`, {
+                      body: JSON.stringify({ tag }),
+                    });
+                    setEnrollmentTokensList((prev) =>
+                      prev.map((token) =>
+                        token.token === item.token
+                          ? {
+                              ...token,
+                              tag: tag || undefined,
+                            }
+                          : token
+                      )
+                    );
+                    notifications.toasts.addSuccess(
+                      i18n.translate('xdrCoordinator.tokenTagSaved', {
+                        defaultMessage: 'Enrollment token tag saved.',
+                      })
+                    );
+                  } catch (error) {
+                    notifications.toasts.addDanger({
+                      title: i18n.translate('xdrCoordinator.tokenTagSaveError', {
+                        defaultMessage: 'Unable to save token tag',
+                      }),
+                      text: error instanceof Error ? error.message : String(error),
+                    });
+                  } finally {
+                    setSavingTokenTags((prev) => {
+                      const next = new Set(prev);
+                      next.delete(item.token);
+                      return next;
+                    });
+                  }
+                }}
+              >
+                {i18n.translate('xdrCoordinator.tokenTagSaveAction', { defaultMessage: 'Save' })}
+              </EuiButtonEmpty>
+            </EuiFlexItem>
+          </EuiFlexGroup>
+        );
+      },
+    },
+    {
       field: 'status' as const,
       name: i18n.translate('xdrCoordinator.tokenColumn.status', { defaultMessage: 'Status' }),
       render: (status: string) => (
@@ -923,22 +1009,6 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
             pageTitle={i18n.translate('xdrCoordinator.pageTitle', { defaultMessage: 'XDR Coordinator' })}
             rightSideItems={headerAction ? [headerAction] : []}
           />
-
-          <EuiCallOut
-            title={i18n.translate('xdrCoordinator.mdoTitle', {
-              defaultMessage: 'MVP mode: local in-memory control plane',
-            })}
-            iconType="iInCircle"
-          >
-            <p>
-              {i18n.translate('xdrCoordinator.mvpDescription', {
-                defaultMessage:
-                  'This MVP focuses on policy assignment, enroll simulation, and remote control actions so you can validate workflows before integrating a real agent transport.',
-              })}
-            </p>
-          </EuiCallOut>
-
-          <EuiSpacer size="m" />
 
           <EuiTabs>
             <EuiTab onClick={() => setActiveTab('agents')} isSelected={activeTab === 'agents'}>
@@ -1132,7 +1202,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
           )}
 
           {isEnrollFlyoutOpen && (
-            <EuiFlyout onClose={() => setIsEnrollFlyoutOpen(false)} ownFocus>
+            <EuiFlyout onClose={closeEnrollFlyout} ownFocus>
               <EuiFlyoutHeader hasBorder>
                 <EuiTitle size="m">
                   <h2>
@@ -1300,7 +1370,7 @@ export const XdrManagerApp = ({ basename, notifications, http }: XdrManagerAppDe
               </EuiFlyoutBody>
 
               <EuiFlyoutFooter>
-                <EuiButtonEmpty onClick={() => setIsEnrollFlyoutOpen(false)}>
+                <EuiButtonEmpty onClick={closeEnrollFlyout}>
                   {i18n.translate('xdrCoordinator.cancelButton', { defaultMessage: 'Cancel' })}
                 </EuiButtonEmpty>
               </EuiFlyoutFooter>
